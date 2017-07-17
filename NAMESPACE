@@ -1,3 +1,6 @@
+importFrom(Rcpp,evalCpp)
 useDynLib(data.vcf)
-exportPattern("^[[:alpha:]]+")
-importFrom(Rcpp, evalCpp)
+
+export(open_file, close_file, read_lines)
+export(open_vcf, read_body)
+export(reformat_body, tobody)

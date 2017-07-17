@@ -1,188 +1,155 @@
-get_filecon <- function(file){
-  if(grepl(".gz$", file)){
-    con <- gzfile(file, open="rb")
-  }else{
-    con <- file(file, open="rb")
+#' open a vcf file (gz compressed or plain)
+#' @param file filename
+#' @return an vcf object which is an environment including the file connection, meta lines, header, etc.
+open_vcf <- function(file){
+  if(!file.exists(file))
+    stop("file not exists")
+  filepath <- file
+  # open file
+  con <- open_file(filepath)
+  # meta line
+  meta <- c()
+  while(length(l <- read_lines(con, 1)) > 0 & substr(l, 1, 2) == "##"){
+    meta <- c(meta, l)
   }
-  con
-}
+  # header line
+  if(substr(l, 1, 4) == "#CHR"){
+    header <- strsplit(l, "\t", fixed=T)[[1]]
+    header <- sub("^#","", header)
+  }else{
+    stop("can not find header")
+  }
 
-open_vcf <- function(file, header_max=1000){
-  #' read vcf file as a list cluding header
-  #' @param file path of vcf file
-  #' @param header_max the max lines to search for the vcf header, if 0, skips reading header, used only for no header lines
-  #'
+  stopifnot(length(header) >= 8)
+  standard_8cols <- c("CHROM","POS","ID","REF","ALT","QUAL","FILTER","INFO")
+  if(any(header[1:8] != standard_8cols)){
+    stop(paste0("header line must be like: ", paste(standard_8cols, collapse="\t")))
+  }
+
+  if(length(header) >= 9)
+    stopifnot(header[9] == "FORMAT")
 
   vcf <- new.env(parent = emptyenv())
-  vcf$filepath <- normalizePath(file, mustWork=T)
-  
-  # read header
-  con <- get_filecon(file)
-  suppressWarnings(header <- readLines(con, n=header_max))
-  close(con)
-  
-  header_pos <- which(substr(header, 1,6)=="#CHROM")
-  if(length(header_pos)==0){
-    stop(paste("can not find header in the first", header_max,  "lines"))
-  }else{
-    vcf$header <- header[1:(header_pos)]
-    vcf$header_names <- strsplit(sub("^#","",header[header_pos]), "\t")[[1]]
-  }
+  vcf$filepath <- filepath
+  vcf$con <- con
+  vcf$meta <- meta
+  vcf$header <- header
 
-  if(length(vcf$header_names) < 8){
-    stop("vcf cols is not < 8")
-  }
-  if(!all.equal(vcf$header_names[1:8] , c("CHROM","POS","ID","REF","ALT","QUAL","FILTER","INFO"))){
-    stop("incorrect header names")
-  }
-  
-  # get file connection skipping header
-  vcf$filecon <- get_filecon(file)
-  suppressWarnings(a <- readLines(vcf$filecon, n=length(vcf$header))) # skip header
-  
-  # init variant count
-  vcf$variant_count <- 0L
-  
-  class(vcf) <- c("vcf", "environment")
+  class(vcf) <- c("vcf", class(vcf))
+
   vcf
 }
 
-close_vcf <- function(vcf){
-  close(vcf$filecon)
-}
+#' read n variants
+#' @param vcf a vcf object returned by open_vcf.
+#' @param n n variants/lines to read
+#' @return data.table the vcf table format.
+read_body <- function(vcf, n=0){
+  lines <- read_lines(vcf$con, n)
 
-read_vcf <- function(file, get_info=TRUE){
-  #' read vcf file variant lines (data.table)
-  #'
-  #' @param vcf an env obj
-  
-  vcf <- open_vcf(file)
-  close(vcf$filecon)
-  
-  which_cat <- "cat"
-  if(grepl(".gz$", vcf$filepath))
-    which_cat <-  "zcat"
-  
-  lines <- fread(paste(which_cat, vcf$filepath), sep="\t", colClasses=c("char"),
-                 skip=length(vcf$header), header=F)
-  if(ncol(lines) < 8)
-    stop("col num is < 8")
-  vcf$header_names <- vcf$header_names[1:ncol(lines)]
-  colnames(lines) <- vcf$header_names
-  
-  if(nrow(lines) == 0)
-    stop("can not find variants")
-  
-  lines[, POS:=as.integer(POS)]
-  
-  vcf$lines <- lines
-  
-  if(get_info)
-    parse_info(vcf)
-  vcf
-}
-
-read_chunk <- function(vcf, chunk_size=1e5){
-  #' read vcf file variant lines (data.table)
-  #'
-  #' @param vcf an env obj
-  #' 
-
-  vcf$lines <- NULL # empty old lines
-  
-  suppressWarnings(lines <- readLines(vcf$filecon, n=chunk_size))
   if(length(lines) == 0){
-    return(FALSE)
+    return(data.table())
   }
-  lines <- strsplit_wide(lines, "\t", fixed=TRUE)
-  
-  if(ncol(lines) < 8)
-    stop("col num is < 8")
-  
-  stopifnot(ncol(lines) <= length(vcf$header_names)) # supporting reductant header names
-  
-  setnames(lines,  vcf$header_names[1:ncol(lines)])
-  
-  if(nrow(lines) == 0)
-  {
-    print("there are not variants anymore!")
-    close(vcf$filecon)
-    return(NULL)
-  }
-  
-  lines[, POS:=as.integer(POS)]
-  
-  vcf$lines <- lines
-  
-  parse_info(vcf)
-  
-  vcf$variant_count = vcf$variant_count + nrow(lines)
-  
-  return(TRUE)
-}
 
-write_vcf <- function(vcf, file, append=FALSE){
-  if(!append & !is.null(v?svcf$header))
-    write(vcf$header, file)
-  fwrite(vcf$lines, file, append=T, sep="\t")
-}
-
-parse_info <- function(vcf){
-  #' convert key-value sets info into a data.table
-  a <- strsplit_long(vcf$lines$INFO, ";", fixed=TRUE)
-  setnames(a, c("varid","kv"))
-  a[, c("k", "v"):=tstrsplit(kv, "=", type.convert=F, fixed=T, fill="")]
-  a[, kv:=NULL]
-  setkey(a, k, varid)
-  vcf$INFO <- a
-}
-
-parse_sample_format <- function(vcf){
-  #' extract sample format
-  #'
-  #' @param vcf vcf env obj
-
-  if(ncol(vcf$lines) >= 10){
-    if("FORMAT" != colnames(vcf$lines)[9]){
-      stop("col 9 is not FORMAT")
+  lines <- tstrsplit(lines, split="\t", fixed=TRUE)
+  if(length(vcf$header) != length(lines)){
+    if(length(vcf$header) == 9 & length(lines) == 8){
+      vcf$header <- vcf$header[1:8] # VEP will get extra FORMAT
+    }else{
+      stop("the length of cols is not equal with the header line")
     }
-    # FORMAT <- strsplit_long(vcf$lines$FORMAT, ":", fixed=T)
-    # setnames(FORMAT, c("varid", "k"))
-    FORMAT <- data.table(
-      varid=rep(1:nrow(vcf$lines), each=4),
-      k=unlist(transpose(tstrsplit(vcf$lines$FORMAT, ":", fixed=TRUE, keep=1:4))))
-    sample_names <- colnames(vcf$lines)[-(1:9)]
-    #FORMAT[, (sample_names):=lapply(sample_names, function(x) unlist(strsplit(vcf$lines[[x]], ":", fixed=T)))]
-    FORMAT[, (sample_names):=lapply(sample_names, function(x) unlist(transpose(tstrsplit(vcf$lines[[x]], ":", fixed=TRUE, keep=1:4))))]
-    setkey(FORMAT, k, varid)
-
-    vcf$FORMAT <- FORMAT
   }
+  names(lines) <- vcf$header
+  setDT(lines)
+  lines
 }
 
-get_genotype <- function(vcf){
-  ### get genotypes
-  
-  if(is.null(vcf$FORMAT))
-    parse_sample_format(vcf)
-  
-  gt <-  vcf$FORMAT["GT", on="k"]
-  if(nrow(gt) > 0){
-    gt <- gt[, -"k", with=F]
-    sample_names <- setdiff(colnames(gt), "varid")
-    gt[, (sample_names):=lapply(.SD[,sample_names,with=F], function(x) {
-      x <- sub("|", "/", x, fixed=TRUE)
-      a <- tstrsplit(x,"/", fixed=TRUE)
-      y <- rep(0L, length(x))
-      y[a[[1]] != a[[2]]] <- 1L
-      y[a[[1]] == a[[2]] & a[[1]] >0] <- 2L
-      y[a[[1]] == "." | is.na(a[[2]]) | a[[2]] == "."] <- -9L # missing values are set to -9L
-      y
-    })]
-    vcf$genotype <- gt
+#' reformat INFO and FORMAT as varid, key, value tables
+#' @param lines data.table returned by read_body
+#' @return list a list of data.tables, including C7: cols1-7, INFO:, FORMAT: FORMAT and samples' genotype information.
+reformat_body <- function(lines, varid_offset=0){
+  variants <- list()
+
+  if(nrow(lines) == 0)
+    return(variants)
+
+  variants$C7 <- lines[, .(varid=.I, CHROM, POS, ID, REF, ALT, QUAL, FILTER)]
+
+  variants$INFO <- setDT(split_info(lines$INFO))
+  setnames(variants$INFO, "i", "varid")
+  variants$INFO <- variants$INFO[!(varid %in% lines[, .I[INFO %in% c(".", "", NA)]])] # remove missing info
+
+  if(ncol(lines) >= 9){
+    ans <- strsplit(lines$FORMAT, ":", fixed=TRUE)
+    FORMAT_Length <- sapply(ans, length)
+    if(any(FORMAT_Length == 0)){
+      stop("Empty string is not allowed in the FORMAT col.")
+    }
+    variants$FORMAT <- data.table(
+      varid = rep(1:nrow(lines), FORMAT_Length),
+      k = unlist(ans))
   }
-  
-  invisible(gt)
+
+  if(ncol(lines) >= 10){
+    samples_split <- lines[, 10:ncol(lines)][
+      ,
+      lapply(.SD, function(x){
+        gt <- strsplit(x,":",fixed=T)
+        if(!all(sapply(gt, length) == FORMAT_Length)){
+          gt <- resize_list_string(gt, FORMAT_Length)
+        }
+        unlist(gt)
+      })]
+    variants$FORMAT <- cbind(variants$FORMAT, samples_split)
+  }
+
+  variants$C7[, varid:=varid+varid_offset]
+  setkey(variants$C7, "varid")
+  variants$INFO[, varid:=varid+varid_offset]
+  setkey(variants$INFO, "varid")
+  if("FORMAT" %in% names(variants)){
+    variants$FORMAT[, varid:=varid+varid_offset]
+    setkey(variants$FORMAT, "varid")
+  }
+  variants
 }
 
+#' revert variants back to the vcf body table format.
+#' @param variants an object returned by reformat_body.
+#' @return data.table
+tobody <- function(variants){
+  if(!all(c("C7","INFO") %in% names(variants))){
+    stop("wrong variant object")
+  }else{
+    setkey(variants$C7, "varid")
+    setkey(variants$INFO, "varid")
+  }
+
+  if("FORMAT" %in% names(variants)){
+    setkey(variants$FORMAT, "varid")
+  }
+
+  lines <- copy(variants$C7)
+
+  variants$INFO[, kv:=paste(k, v, sep="=")]
+  variants$INFO[is.na(v), kv:=paste(k, ".", sep="=")] # reset missing values
+  variants$INFO[v == "", kv:=as.character(k)] # reset flag info
+  info_dt <- variants$INFO[, .(INFO=paste(kv, collapse=";")), by="varid"]
+  lines[info_dt, INFO:=INFO]
+  lines[is.na(INFO), INFO:="."]
+  variants$INFO[, kv:=NULL]
+
+  if("FORMAT" %in% names(variants)){
+    if(nrow(variants$FORMAT) > 0){
+      inds <- setdiff(colnames(variants$FORMAT), c("k","varid"))
+      varid_groups <- tapply(1:nrow(variants$FORMAT), variants$FORMAT$varid, c)
+      format_dt <- collapse_group(variants$FORMAT[, c("k", inds), with=FALSE], varid_groups, sep=":")
+      names(format_dt) <- c("FORMAT", inds)
+      format_dt$varid <- as.integer(names(varid_groups))
+      setDT(format_dt, key="varid")
+      lines <- merge(lines, format_dt[, c("varid","FORMAT", inds), with=F], all.x=TRUE)
+    }
+  }
+  lines[, -"varid"]
+}
 

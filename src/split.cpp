@@ -21,3 +21,10 @@ std::vector<std::string> split(const std::string &s, const std::string& delims) 
     return split(s, delims, elems);
 }
 
+std::vector<std::vector<std::string> > split(const std::vector<std::string>& x, const std::string& sep){
+  std::vector< std::vector<std::string> > out;
+  for(int i = 0; i < x.size(); i++){
+    out.push_back(split(x[i], sep));
+  }
+  return out;
+}

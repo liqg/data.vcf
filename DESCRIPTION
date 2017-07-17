@@ -1,13 +1,18 @@
 Package: data.vcf
 Type: Package
 Title: A very simple package for VCF manipulation based on data.table
-Version: 1.0
+Version: 0.1.0
 Date: 2017-03-25
 Author: Your Name
 Maintainer: Your Name <your@email.com>
-Description: One paragraph description of what the package does as one
-        or more full sentences.
+Description: fast vcf read and manipulation.
 License: GPL (>= 2)
-
-Imports: Rcpp (>= 0.12.10)
+Imports:
+    Rcpp (>= 0.12.10)
+Depends:
+    data.table (>= 1.10.0)
 LinkingTo: Rcpp
+RoxygenNote: 5.0.1
+Suggests: knitr, rmarkdown
+VignetteBuilder: knitr
+LazyData: FALSE
