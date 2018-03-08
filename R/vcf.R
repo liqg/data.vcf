@@ -1,4 +1,4 @@
-#' open a vcf file (gz compressed or plain)
+#' open a vcf file (gz-compressed or plain)
 #' @param file filename
 #' @return an vcf object which is an environment including the file connection, meta lines, header, etc.
 open_vcf <- function(file){
@@ -23,7 +23,7 @@ open_vcf <- function(file){
   stopifnot(length(header) >= 8)
   standard_8cols <- c("CHROM","POS","ID","REF","ALT","QUAL","FILTER","INFO")
   if(any(header[1:8] != standard_8cols)){
-    stop(paste0("header line must be like: ", paste(standard_8cols, collapse="\t")))
+    stop(paste0("header line must be like: #", paste(standard_8cols, collapse="\t")))
   }
 
   if(length(header) >= 9)
@@ -53,11 +53,12 @@ read_body <- function(vcf, n=0){
 
   lines <- tstrsplit(lines, split="\t", fixed=TRUE)
   if(length(vcf$header) != length(lines)){
-    if(length(vcf$header) == 9 & length(lines) == 8){
-      vcf$header <- vcf$header[1:8] # VEP will get extra FORMAT
-    }else{
-      stop("the length of cols is not equal with the header line")
-    }
+    # if(length(vcf$header) == 9 & length(lines) == 8){
+    #   vcf$header <- vcf$header[1:8] # VEP will get extra FORMAT
+    # }else{
+    #   stop("The number of cols in the body must be equal to that in the header line!")
+    # }
+    stop("The number of cols in the body must be equal to that in the header line!")
   }
   names(lines) <- vcf$header
   setDT(lines)

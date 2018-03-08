@@ -8,7 +8,7 @@ Maintainer: Your Name <your@email.com>
 Description: fast vcf read and manipulation.
 License: GPL (>= 2)
 Imports:
-    Rcpp (>= 0.12.10)
+    Rcpp
 Depends:
     data.table (>= 1.10.0)
 LinkingTo: Rcpp

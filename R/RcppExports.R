@@ -5,11 +5,13 @@
 #' @param path the path for vcf file
 #' @return a reader object for vcf reading
 open_file <- function(path) {
-    .Call('data_vcf_open_file', PACKAGE = 'data.vcf', path)
+    .Call('_data_vcf_open_file', PACKAGE = 'data.vcf', path)
 }
 
+#' close file.
+#' @param reader a pointer returned by open_file.
 close_file <- function(reader) {
-    invisible(.Call('data_vcf_close_file', PACKAGE = 'data.vcf', reader))
+    invisible(.Call('_data_vcf_close_file', PACKAGE = 'data.vcf', reader))
 }
 
 #' read n lines from the file.
@@ -17,20 +19,20 @@ close_file <- function(reader) {
 #' @param n how many lines to read default: n=0 for file end
 #' @return a character vector, return a empty vector (length=0) when reading a file that had reached EOF; return a vector of length 1 with "" for blank line.
 read_lines <- function(reader, n) {
-    .Call('data_vcf_read_lines', PACKAGE = 'data.vcf', reader, n)
+    .Call('_data_vcf_read_lines', PACKAGE = 'data.vcf', reader, n)
 }
 
 resize_list_string <- function(x, n, fill = "") {
-    .Call('data_vcf_resize_list_string', PACKAGE = 'data.vcf', x, n, fill)
+    .Call('_data_vcf_resize_list_string', PACKAGE = 'data.vcf', x, n, fill)
 }
 
 split_info <- function(x) {
-    .Call('data_vcf_split_info', PACKAGE = 'data.vcf', x)
+    .Call('_data_vcf_split_info', PACKAGE = 'data.vcf', x)
 }
 
 #' 7x slower than strsplit so not used
 split_sample <- function(x, sep, n, fill = "") {
-    .Call('data_vcf_split_sample', PACKAGE = 'data.vcf', x, sep, n, fill)
+    .Call('_data_vcf_split_sample', PACKAGE = 'data.vcf', x, sep, n, fill)
 }
 
 #' looply collapse each vector of a list by a group of indexs
@@ -41,6 +43,6 @@ split_sample <- function(x, sep, n, fill = "") {
 #' @return list
 #'
 collapse_group <- function(x, g, sep = "", fill = "") {
-    .Call('data_vcf_collapse_group', PACKAGE = 'data.vcf', x, g, sep, fill)
+    .Call('_data_vcf_collapse_group', PACKAGE = 'data.vcf', x, g, sep, fill)
 }
 

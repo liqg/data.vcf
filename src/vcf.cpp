@@ -30,6 +30,8 @@ XPtr_gz_reader open_file(std::string path){
   return out;
 }
 
+//' close file.
+//' @param reader a pointer returned by open_file.
 // [[Rcpp::export]]
 void close_file(XPtr_gz_reader reader){
   gzclose(reader->con);

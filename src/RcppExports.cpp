@@ -8,7 +8,7 @@ using namespace Rcpp;
 
 // open_file
 XPtr_gz_reader open_file(std::string path);
-RcppExport SEXP data_vcf_open_file(SEXP pathSEXP) {
+RcppExport SEXP _data_vcf_open_file(SEXP pathSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -19,7 +19,7 @@ END_RCPP
 }
 // close_file
 void close_file(XPtr_gz_reader reader);
-RcppExport SEXP data_vcf_close_file(SEXP readerSEXP) {
+RcppExport SEXP _data_vcf_close_file(SEXP readerSEXP) {
 BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< XPtr_gz_reader >::type reader(readerSEXP);
@@ -29,7 +29,7 @@ END_RCPP
 }
 // read_lines
 std::vector<std::string> read_lines(XPtr_gz_reader reader, unsigned int n);
-RcppExport SEXP data_vcf_read_lines(SEXP readerSEXP, SEXP nSEXP) {
+RcppExport SEXP _data_vcf_read_lines(SEXP readerSEXP, SEXP nSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -41,7 +41,7 @@ END_RCPP
 }
 // resize_list_string
 std::vector<std::vector<std::string> > resize_list_string(std::vector<std::vector<std::string> >& x, std::vector<int> n, std::string fill);
-RcppExport SEXP data_vcf_resize_list_string(SEXP xSEXP, SEXP nSEXP, SEXP fillSEXP) {
+RcppExport SEXP _data_vcf_resize_list_string(SEXP xSEXP, SEXP nSEXP, SEXP fillSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -54,7 +54,7 @@ END_RCPP
 }
 // split_info
 Rcpp::List split_info(std::vector<std::string>& x);
-RcppExport SEXP data_vcf_split_info(SEXP xSEXP) {
+RcppExport SEXP _data_vcf_split_info(SEXP xSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -65,7 +65,7 @@ END_RCPP
 }
 // split_sample
 std::vector<std::vector<std::string> > split_sample(std::vector<std::string>& x, std::string sep, std::vector<unsigned int>& n, std::string fill);
-RcppExport SEXP data_vcf_split_sample(SEXP xSEXP, SEXP sepSEXP, SEXP nSEXP, SEXP fillSEXP) {
+RcppExport SEXP _data_vcf_split_sample(SEXP xSEXP, SEXP sepSEXP, SEXP nSEXP, SEXP fillSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -79,7 +79,7 @@ END_RCPP
 }
 // collapse_group
 std::vector<std::vector<std::string> > collapse_group(std::vector<std::vector<std::string> >& x, std::vector<std::vector<unsigned int> >& g, std::string sep, std::string fill);
-RcppExport SEXP data_vcf_collapse_group(SEXP xSEXP, SEXP gSEXP, SEXP sepSEXP, SEXP fillSEXP) {
+RcppExport SEXP _data_vcf_collapse_group(SEXP xSEXP, SEXP gSEXP, SEXP sepSEXP, SEXP fillSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -90,4 +90,20 @@ BEGIN_RCPP
     rcpp_result_gen = Rcpp::wrap(collapse_group(x, g, sep, fill));
     return rcpp_result_gen;
 END_RCPP
+}
+
+static const R_CallMethodDef CallEntries[] = {
+    {"_data_vcf_open_file", (DL_FUNC) &_data_vcf_open_file, 1},
+    {"_data_vcf_close_file", (DL_FUNC) &_data_vcf_close_file, 1},
+    {"_data_vcf_read_lines", (DL_FUNC) &_data_vcf_read_lines, 2},
+    {"_data_vcf_resize_list_string", (DL_FUNC) &_data_vcf_resize_list_string, 3},
+    {"_data_vcf_split_info", (DL_FUNC) &_data_vcf_split_info, 1},
+    {"_data_vcf_split_sample", (DL_FUNC) &_data_vcf_split_sample, 4},
+    {"_data_vcf_collapse_group", (DL_FUNC) &_data_vcf_collapse_group, 4},
+    {NULL, NULL, 0}
+};
+
+RcppExport void R_init_data_vcf(DllInfo *dll) {
+    R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
+    R_useDynamicSymbols(dll, FALSE);
 }
