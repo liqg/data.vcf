@@ -22,17 +22,23 @@ read_lines <- function(reader, n) {
     .Call('_data_vcf_read_lines', PACKAGE = 'data.vcf', reader, n)
 }
 
+#' Resize a list of string vectors by a number vector with a same length with the list.
+#' The elements of x[i] after n[i] will be discarded, 
+#' however, if the length of x[i] is less than n[i], the 'fill' string will be added in the end.
+#' @param x a list of string vectors.
+#' @n a number vector.
+#' @fill default value for expanded vector.
+#' @return a resized list will be return.
 resize_list_string <- function(x, n, fill = "") {
     .Call('_data_vcf_resize_list_string', PACKAGE = 'data.vcf', x, n, fill)
 }
 
-split_info <- function(x) {
-    .Call('_data_vcf_split_info', PACKAGE = 'data.vcf', x)
-}
-
-#' 7x slower than strsplit so not used
-split_sample <- function(x, sep, n, fill = "") {
-    .Call('_data_vcf_split_sample', PACKAGE = 'data.vcf', x, sep, n, fill)
+#' Split a str by sep into ikv list.
+#' @param x a string vector
+#' @return An list of {i, k, v}
+#'
+str_to_ikv <- function(x, sep) {
+    .Call('_data_vcf_str_to_ikv', PACKAGE = 'data.vcf', x, sep)
 }
 
 #' looply collapse each vector of a list by a group of indexs

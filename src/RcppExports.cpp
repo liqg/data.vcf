@@ -52,28 +52,15 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// split_info
-Rcpp::List split_info(std::vector<std::string>& x);
-RcppExport SEXP _data_vcf_split_info(SEXP xSEXP) {
+// str_to_ikv
+Rcpp::List str_to_ikv(std::vector<std::string>& x, const char sep);
+RcppExport SEXP _data_vcf_str_to_ikv(SEXP xSEXP, SEXP sepSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< std::vector<std::string>& >::type x(xSEXP);
-    rcpp_result_gen = Rcpp::wrap(split_info(x));
-    return rcpp_result_gen;
-END_RCPP
-}
-// split_sample
-std::vector<std::vector<std::string> > split_sample(std::vector<std::string>& x, std::string sep, std::vector<unsigned int>& n, std::string fill);
-RcppExport SEXP _data_vcf_split_sample(SEXP xSEXP, SEXP sepSEXP, SEXP nSEXP, SEXP fillSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::vector<std::string>& >::type x(xSEXP);
-    Rcpp::traits::input_parameter< std::string >::type sep(sepSEXP);
-    Rcpp::traits::input_parameter< std::vector<unsigned int>& >::type n(nSEXP);
-    Rcpp::traits::input_parameter< std::string >::type fill(fillSEXP);
-    rcpp_result_gen = Rcpp::wrap(split_sample(x, sep, n, fill));
+    Rcpp::traits::input_parameter< const char >::type sep(sepSEXP);
+    rcpp_result_gen = Rcpp::wrap(str_to_ikv(x, sep));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -97,8 +84,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_data_vcf_close_file", (DL_FUNC) &_data_vcf_close_file, 1},
     {"_data_vcf_read_lines", (DL_FUNC) &_data_vcf_read_lines, 2},
     {"_data_vcf_resize_list_string", (DL_FUNC) &_data_vcf_resize_list_string, 3},
-    {"_data_vcf_split_info", (DL_FUNC) &_data_vcf_split_info, 1},
-    {"_data_vcf_split_sample", (DL_FUNC) &_data_vcf_split_sample, 4},
+    {"_data_vcf_str_to_ikv", (DL_FUNC) &_data_vcf_str_to_ikv, 2},
     {"_data_vcf_collapse_group", (DL_FUNC) &_data_vcf_collapse_group, 4},
     {NULL, NULL, 0}
 };

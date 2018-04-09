@@ -7,7 +7,7 @@
 struct gz_reader {
   const char *path;
   gzFile con;
-  std::string remains; // the remaining 
+  std::string buffer; // the remaining 
 };
 
 inline void finalizer_reader(gz_reader * reader) {

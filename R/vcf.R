@@ -65,6 +65,21 @@ read_body <- function(vcf, n=0){
   lines
 }
 
+#' Split sample col by FORMAT in a split-resize strategy way which is very fast.
+#' The elements of x[i] after n[i] will be discarded, 
+#' however, if the length of x[i] is less than n[i], the '' string will be added in the end.
+#' @param x the char vector of a sample col.
+#' @param FORMAT_length a length vector of FORMAT feilds.
+#' @return a char vector.
+reformat_sample <- function(x, FORMAT_length){
+  xs <- strsplit(x,":",fixed=T)
+  # ensure that the length of splited sample col is same as the splited format col.
+  if(!all(sapply(xs, length) == FORMAT_length)){
+    xs <- resize_list_string(xs, FORMAT_length, fill="")
+  }
+  unlist(xs)
+}
+
 #' reformat INFO and FORMAT as varid, key, value tables
 #' @param lines data.table returned by read_body
 #' @return list a list of data.tables, including C7: cols1-7, INFO:, FORMAT: FORMAT and samples' genotype information.
@@ -76,32 +91,26 @@ reformat_body <- function(lines, varid_offset=0){
 
   variants$C7 <- lines[, .(varid=.I, CHROM, POS, ID, REF, ALT, QUAL, FILTER)]
 
-  variants$INFO <- setDT(split_info(lines$INFO))
+  variants$INFO <- setDT(str_to_ikv(lines$INFO, sep=";"))
   setnames(variants$INFO, "i", "varid")
   variants$INFO <- variants$INFO[!(varid %in% lines[, .I[INFO %in% c(".", "", NA)]])] # remove missing info
-
+  
+  # split sample format
   if(ncol(lines) >= 9){
-    ans <- strsplit(lines$FORMAT, ":", fixed=TRUE)
-    FORMAT_Length <- sapply(ans, length)
-    if(any(FORMAT_Length == 0)){
+    splited_format <- strsplit(lines$FORMAT, ":", fixed=TRUE)
+    FORMAT_length <- sapply(splited_format, length)
+    if(any(FORMAT_length == 0)){
       stop("Empty string is not allowed in the FORMAT col.")
     }
     variants$FORMAT <- data.table(
-      varid = rep(1:nrow(lines), FORMAT_Length),
-      k = unlist(ans))
+      varid = rep(1:nrow(lines), FORMAT_length),
+      k = unlist(splited_format))
   }
 
   if(ncol(lines) >= 10){
-    samples_split <- lines[, 10:ncol(lines)][
-      ,
-      lapply(.SD, function(x){
-        gt <- strsplit(x,":",fixed=T)
-        if(!all(sapply(gt, length) == FORMAT_Length)){
-          gt <- resize_list_string(gt, FORMAT_Length)
-        }
-        unlist(gt)
-      })]
-    variants$FORMAT <- cbind(variants$FORMAT, samples_split)
+    variants$FORMAT <- cbind(
+      variants$FORMAT, 
+      lines[, lapply(.SD, reformat_sample, FORMAT_length = ..("FORMAT_length")), .SDcols=10:ncol(..("lines"))])
   }
 
   variants$C7[, varid:=varid+varid_offset]
@@ -114,6 +123,60 @@ reformat_body <- function(lines, varid_offset=0){
   }
   variants
 }
+table_variants <- function(variants, INFO=NULL, FORMAT=NULL){
+  res <- data.table()
+  if(length(variants)==0) return(res)
+  ikv_info <- variants$INFO
+  if(!is.null(INFO)){
+    ikv_info <- variants$INFO[k %in% INFO]
+  }
+  info_dt <- dcast(variants$INFO, varid ~ k, value.var = "v")
+  setnames(info_dt, c("varid", paste0("INFO.", setdiff(colnames(info_dt),"varid"))))
+  setkey(info_dt, "varid")
+  dt <- merge(variants$C7, info_dt, by="varid", all.x=T, suffixes=c("", "."))
+  if("FORMAT" %in% names(variants)){
+    format_ikv <- variants$FORMAT
+    if(!is.null(FORMAT)){
+      format_ikv <-  format_ikv[k %in% FORMAT]
+    }
+    unique(format_ikv, by=c("varid","k"))
+    format_dt <- dcast(format_ikv, varid ~ k, value.var = setdiff(colnames(variants$FORMAT), c("varid","k")))
+    newnames <- setdiff(colnames(format_dt), "varid")
+    
+    setnames(gt_dt, c())
+  }
+  
+  
+}
+
+table_vcf <-function(infile, outfile, fields, n=1000L){
+  stopifnot(length(fields)>0)
+  # stopifnot(length(fields) == length(fieldClasses))
+  # stopifnot(all(fieldClasses %in% c("numeric","integer","character")))
+  newnames <- fields
+  if(!is.null(names(fields))){
+    newnames[names(fields) != ""] <- names(fields)[names(fields)!=""]
+  }
+  
+  dt0 <- fread(paste0(paste(rep(1, length(fields)), collapse="\t"), "\n"),
+               header=F, sep="\t", col.names=fields)[0]
+  
+  vcf <- open_vcf(infile);
+  write(paste0(paste(rep(1, length(newnames)), collapse="\t"), "\n"), file=outfile)
+  while(nrow(lines_dt <- read_body(vcf, n=n)) > 0){
+    if(nrow(lines_dt)==0){
+      return(NULL)
+    }
+    variants <- reformat_body(lines_dt)
+    info_dt <- dcast(variants$INFO, varid ~ k, value.var = "v")
+    setkey(info_dt, "varid")
+    dt <- merge(variants$C7, info_dt, by="varid", all.x=T, suffixes=c("", "."))
+    dt <- dt[, fields, with=FALSE]
+    dt <- rbind(dt0, dt, fill=TRUE)
+    fwrite(dt, outfile, append=T, sep="\t", col.names=FALSE)
+  }
+}
+
 
 #' revert variants back to the vcf body table format.
 #' @param variants an object returned by reformat_body.
@@ -153,4 +216,5 @@ tobody <- function(variants){
   }
   lines[, -"varid"]
 }
+
 

@@ -2,7 +2,7 @@
 % Please edit documentation in R/vcf.R
 \name{open_vcf}
 \alias{open_vcf}
-\title{open a vcf file (gz compressed or plain)}
+\title{open a vcf file (gz-compressed or plain)}
 \usage{
 open_vcf(file)
 }
@@ -13,6 +13,6 @@ open_vcf(file)
 an vcf object which is an environment including the file connection, meta lines, header, etc.
 }
 \description{
-open a vcf file (gz compressed or plain)
+open a vcf file (gz-compressed or plain)
 }
 

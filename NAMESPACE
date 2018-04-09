@@ -1,3 +1,4 @@
+importFrom(magrittr,"%>%")
 importFrom(Rcpp,evalCpp)
 useDynLib(data.vcf)
 
@@ -5,3 +6,5 @@ export(open_file, read_lines)
 export(close_file)
 export(open_vcf, read_body)
 export(reformat_body, tobody)
+export(indexdb)
+export(fetchdb)
