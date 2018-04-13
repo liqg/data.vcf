@@ -18,6 +18,7 @@ close_file <- function(reader) {
 #' @param reader a pointer returned by open_vcf.
 #' @param n how many lines to read default: n=0 for file end
 #' @return a character vector, return a empty vector (length=0) when reading a file that had reached EOF; return a vector of length 1 with "" for blank line.
+#' TODO: add break param to determine if break the lines
 read_lines <- function(reader, n) {
     .Call('_data_vcf_read_lines', PACKAGE = 'data.vcf', reader, n)
 }
