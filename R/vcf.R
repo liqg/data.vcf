@@ -34,10 +34,15 @@ open_vcf <- function(file){
   vcf$con <- con
   vcf$meta <- meta
   vcf$header <- header
+  vcf$nvar <- 0L
 
   class(vcf) <- c("vcf", class(vcf))
 
   vcf
+}
+
+close.vcf <- function(vcf){
+  close_file(vcf$con)
 }
 
 #' read n variants
@@ -50,18 +55,15 @@ read_body <- function(vcf, n=0){
   if(length(lines) == 0){
     return(data.table())
   }
+  vcf$nvar <- vcf$nvar + length(lines)
 
   lines <- tstrsplit(lines, split="\t", fixed=TRUE)
   if(length(vcf$header) != length(lines)){
-    # if(length(vcf$header) == 9 & length(lines) == 8){
-    #   vcf$header <- vcf$header[1:8] # VEP will get extra FORMAT
-    # }else{
-    #   stop("The number of cols in the body must be equal to that in the header line!")
-    # }
     stop("The number of cols in the body must be equal to that in the header line!")
   }
   names(lines) <- vcf$header
   setDT(lines)
+  
   lines
 }
 
@@ -123,30 +125,81 @@ reformat_body <- function(lines, varid_offset=0){
   }
   variants
 }
-table_variants <- function(variants, INFO=NULL, FORMAT=NULL){
-  res <- data.table()
-  if(length(variants)==0) return(res)
-  ikv_info <- variants$INFO
-  if(!is.null(INFO)){
-    ikv_info <- variants$INFO[k %in% INFO]
+
+table_vars <- function(variants, info_keys=NULL, format_keys=NULL){
+  dt <- data.table()
+  if(length(variants)==0) return(dt)
+  if(nrow(variants$C7) == 0 ) {
+    return(dt)
+  }else{
+    dt <- variants$C7
   }
-  info_dt <- dcast(variants$INFO, varid ~ k, value.var = "v")
-  setnames(info_dt, c("varid", paste0("INFO.", setdiff(colnames(info_dt),"varid"))))
-  setkey(info_dt, "varid")
-  dt <- merge(variants$C7, info_dt, by="varid", all.x=T, suffixes=c("", "."))
+
+  if("INFO" %in% names(variants)){
+    info_ikv <- variants$INFO
+    if(!is.null(info_keys)){
+      info_ikv <- info_ikv[k %in% info_keys]
+    }
+    info_dt <- dcast(info_ikv, varid ~ k, value.var = "v")
+    setnames(info_dt, c("varid", paste0("INFO.", setdiff(colnames(info_dt),"varid"))))
+    setkey(info_dt, varid)
+    dt <- merge(dt, info_dt, by="varid", all.x=T, suffixes=c("", "."))
+  }
+  
   if("FORMAT" %in% names(variants)){
     format_ikv <- variants$FORMAT
-    if(!is.null(FORMAT)){
-      format_ikv <-  format_ikv[k %in% FORMAT]
+    if(!is.null(format_keys)){
+      format_ikv <-  format_ikv[k %in% format_keys]
     }
     unique(format_ikv, by=c("varid","k"))
     format_dt <- dcast(format_ikv, varid ~ k, value.var = setdiff(colnames(variants$FORMAT), c("varid","k")))
-    newnames <- setdiff(colnames(format_dt), "varid")
+    newnames <- matrix(stringr::str_match(setdiff(colnames(format_dt), "varid"),"(.+)_([^_]+)")[,-1], ncol=2)
+    newnames <- paste("FORMAT", newnames[,2], newnames[,1], sep=".")
+    setnames(format_dt, c("varid", newnames))
+    setkey(format_dt, varid)
     
-    setnames(gt_dt, c())
+    dt <- merge(dt, format_dt, by="varid", all.x=T, suffixes=c("", "."))
   }
   
+  dt
+}
+
+#' Read n variants from a opened vcf file.
+#' @param vcf A vcf object returned by open_vcf
+#' @param n The number of lines to be read
+#' @param info_keys a subset of INFO keys
+#' @param format_keys a subset of FORMAT keys
+#' @param convert FALSE for returning a VCF table, the default is TRUE, see
+#' @details read_vars returns a data.table where the INFO and FORMAT are splited.
+#' INFO feilds are named as INFO.key, INFO.AF for example.
+#' FORMAT feilds are named as FORMAT.key.sampleid, FORMAT.GT.sample1 for example.
+read_vars <- function(vcf, n=0L, info_keys=NULL, format_keys=NULL, sample_ids=NULL, convert=TRUE){
+  stopifnot(inherits(vcf, "vcf"))
+  dt <- data.table()
+  lines_dt <- read_body(vcf, n=n)
+  vcf$lines <- lines_dt
   
+  if(nrow(lines_dt) == 0) return(dt)
+  
+  if(!is.null(sample_ids)){
+    sample_ids <- unique(sample_ids)
+    id <- sample_ids %in% colnames(lines_dt)[-(1:9)]
+    if(any(!id)){
+      stop(paste0("unrecognized sample_ids: ", 
+                  paste(sample_ids[!id], collapse=","),
+                  ".\n must be in the: ",
+                  paste(colnames(lines_dt)[-(1:9)], collapse=", ")))
+    }
+    lines_dt <- lines_dt[, c(colnames(lines_dt)[1:9], sample_ids), with=F]
+  }
+  
+  if(!convert) return(lines_dt)
+  
+  dt <- reformat_body(lines_dt)
+  dt <- table_vars(dt, info_keys=info_keys, format_keys=format_keys)
+  dt <- dt[, -1] #remove varid
+  
+  dt
 }
 
 table_vcf <-function(infile, outfile, fields, n=1000L){
@@ -176,6 +229,55 @@ table_vcf <-function(infile, outfile, fields, n=1000L){
     fwrite(dt, outfile, append=T, sep="\t", col.names=FALSE)
   }
 }
+
+tovcf <- function(dt){
+  stopifnot(!all(c("CHROM","REF","ALT","POS") %in% colnames(dt)))
+  
+  if(!"ID" %in% colnames(dt)){
+    ID <- "."
+  }else{
+    ID <- dt$ID
+  }
+  
+  if(!"QUAL" %in% colnames(dt)){
+    QUAL <- "."
+  }else{
+    QUAL <- dt$QUAL
+  }
+  
+  if(!"FILTER" %in% colnames(dt)){
+    FILTER <- "."
+  }else{
+    FILTER <- dt$FILTER
+  }
+  
+  #gather INFO
+  info_cols <- grep("^INFO\.", colnames(dt), value=T)
+  if(length(info_cols)==0){
+    INFO <- "."
+  }else{
+    INFO <- do.call(paste, c(lapply(info_cols, function(x){
+      k <- sub("^INFO\.", "", x)
+      v <- paste(k, dt[[x]], sep="=")
+      v[is.na(dt[[x]])] <- ""
+      v
+    }),sep=";"))
+  }
+  
+  #gather FORMAT
+  format_cols <- grep("^FORMAT\.", colnames(dt), value=T)
+  if(length(format_cols) > 0){
+    
+  }
+  
+  #gather samples
+  
+  
+  
+  
+}
+
+
 
 
 #' revert variants back to the vcf body table format.
