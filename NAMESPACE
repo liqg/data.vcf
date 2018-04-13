@@ -8,7 +8,7 @@ export(read_lines)
 export(open_vcf)
 S3method(close, vcf)
 export(read_vars)
-export(tovcf)
+export(split_vars, tovcf)
 
 
 export(opendb)
