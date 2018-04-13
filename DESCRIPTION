@@ -1,6 +1,6 @@
 Package: data.vcf
 Type: Package
-Title: A fast and simple tool for genomic data storage, read and manipulation
+Title: A fast and simple tool for genomic manipulation in R's style
 Version: 0.2.0
 Date: 2017-03-25
 Author: liqg
@@ -8,7 +8,9 @@ Maintainer: liqg <liqg3@qq.com>
 Description: fast vcf read and manipulation.
 License: GPL (>= 2)
 Imports:
-    Rcpp
+    Rcpp,
+    stringr,
+    gdsfmt
 Depends:
     data.table (>= 1.10.2)
 LinkingTo: Rcpp
