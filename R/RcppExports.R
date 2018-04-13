@@ -53,3 +53,9 @@ collapse_group <- function(x, g, sep = "", fill = "") {
     .Call('_data_vcf_collapse_group', PACKAGE = 'data.vcf', x, g, sep, fill)
 }
 
+#' remove consecutive duplicate characters in a string
+#' 
+uniq_char <- function(x, y = "") {
+    .Call('_data_vcf_uniq_char', PACKAGE = 'data.vcf', x, y)
+}
+

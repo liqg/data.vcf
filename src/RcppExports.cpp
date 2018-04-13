@@ -78,6 +78,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// uniq_char
+std::vector<std::string> uniq_char(std::vector<std::string> x, std::string y);
+RcppExport SEXP _data_vcf_uniq_char(SEXP xSEXP, SEXP ySEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::vector<std::string> >::type x(xSEXP);
+    Rcpp::traits::input_parameter< std::string >::type y(ySEXP);
+    rcpp_result_gen = Rcpp::wrap(uniq_char(x, y));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_data_vcf_open_file", (DL_FUNC) &_data_vcf_open_file, 1},
@@ -86,6 +98,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_data_vcf_resize_list_string", (DL_FUNC) &_data_vcf_resize_list_string, 3},
     {"_data_vcf_str_to_ikv", (DL_FUNC) &_data_vcf_str_to_ikv, 2},
     {"_data_vcf_collapse_group", (DL_FUNC) &_data_vcf_collapse_group, 4},
+    {"_data_vcf_uniq_char", (DL_FUNC) &_data_vcf_uniq_char, 2},
     {NULL, NULL, 0}
 };
 
