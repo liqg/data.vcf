@@ -126,7 +126,7 @@ reformat_body <- function(lines, varid_offset=0){
   variants
 }
 
-table_vars <- function(variants, info_keys=NULL, format_keys=NULL){
+split_vars <- function(variants, info_keys=NULL, format_keys=NULL){
   dt <- data.table()
   if(length(variants)==0) return(dt)
   if(nrow(variants$C7) == 0 ) {
@@ -173,7 +173,7 @@ table_vars <- function(variants, info_keys=NULL, format_keys=NULL){
 #' @details read_vars returns a data.table where the INFO and FORMAT are splited.
 #' INFO feilds are named as INFO.key, INFO.AF for example.
 #' FORMAT feilds are named as FORMAT.key.sampleid, FORMAT.GT.sample1 for example.
-read_vars <- function(vcf, n=0L, info_keys=NULL, format_keys=NULL, sample_ids=NULL, convert=TRUE){
+read_vars <- function(vcf, n=0L, info_keys=NULL, format_keys=NULL, sample_ids=NULL, split=TRUE){
   stopifnot(inherits(vcf, "vcf"))
   dt <- data.table()
   lines_dt <- read_body(vcf, n=n)
@@ -193,10 +193,10 @@ read_vars <- function(vcf, n=0L, info_keys=NULL, format_keys=NULL, sample_ids=NU
     lines_dt <- lines_dt[, c(colnames(lines_dt)[1:9], sample_ids), with=F]
   }
   
-  if(!convert) return(lines_dt)
+  if(!split) return(lines_dt)
   
   dt <- reformat_body(lines_dt)
-  dt <- table_vars(dt, info_keys=info_keys, format_keys=format_keys)
+  dt <- split_vars(dt, info_keys=info_keys, format_keys=format_keys)
   dt <- dt[, -1] #remove varid
   
   dt
