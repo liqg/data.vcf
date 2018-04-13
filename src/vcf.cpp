@@ -184,6 +184,18 @@ Rcpp::List str_to_ikv (std::vector<std::string> &x, const char sep){
 //   return out;
 // }
 
+// std::vector<std::vector<std::string> > table_str(
+//   const std::vector<std::string> &x,
+//   const std::string seq,
+//   const std::string fill = ""
+// ){
+//   std::vector<std::vector<std::string> > out(x.size());
+//   if(x.size() == 0) return out;
+//   int nc = split(x[0], seq).size();
+//   int nr = x.size();
+//   
+// }
+
 //' looply collapse each vector of a list by a group of indexs
 //' @param x list
 //' @param g list
@@ -211,5 +223,29 @@ std::vector<std::vector<std::string> > collapse_group(
     out[i] = out_i;
   }
   return out;
+}
+
+//' remove consecutive duplicate characters in a string
+//' 
+// [[Rcpp::export]]
+std::vector<std::string> uniq_char(std::vector<std::string> x, std::string y=""){
+  char c = y[0];
+  std::vector<std::string> res(x.size());
+  for(int i=0; i<x.size(); i++){
+    char s[x[i].size()+1];
+    int k=0;
+    if(x[i].size()>1){
+      s[k++] = x[i][0];
+      for(int j=1; j<x[i].size(); j++){
+        if(c ? (x[i][j-1] != c  || x[i][j] != c) : x[i][j] != x[i][j-1]){
+          s[k]=x[i][j];
+          k++;
+        }
+      }
+      s[k] = '\0';
+    }
+    res[i]=std::string(s);
+  }
+  return res;
 }
 
