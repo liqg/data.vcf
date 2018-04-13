@@ -1,8 +1,20 @@
-`..` <- function (x) 
+".." <- function (x) 
 {
   stopifnot(inherits(x, "character"))
   stopifnot(length(x) == 1)
   get(x, parent.frame(4))
+}
+
+set_cols <- function(x, funcs){
+  for(i in names(funcs)){
+   if(i %in% colnames(x)){
+     f <- funcs[[i]]
+     if(!is.function(f)){
+       f <- get(f)
+     }
+     x[, (..("i")):=..("f")(get(..("i")))]
+   } 
+  }
 }
 
 submatrix <- function(x, rows=rownames(x), cols=colnames(x), missing=NA){
