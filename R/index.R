@@ -123,67 +123,70 @@ update_chrstatus <- function(x, chrstatus){
   chrstatus
 }
 
-parse_header <- function(reader, index_cols){
-  n <- length(index_cols)
+parse_header <- function(reader){
+  mystop <- function(msg){
+    close_file(reader)
+    stop(msg)
+  }
+  
   repeat{
     l1 <- read_lines(reader, 1L)
-    if(!startsWith(l1, "#")) break
+    if(!startsWith(l1, "##")) break
   }
 
   if(length(l1) == 0) {
-    close_file(reader)
-    stop("empty file!")
+    mystop("empty file!")
   }
-
-  if(!startsWith(l1, paste(index_cols, collapse="\t"))){
-    close_file(reader)
-    stop(paste("the leading cols must be:",
-               paste(index_cols, collapse="\t")))
+  
+  l1 <- sub("^#", "", l1)
+  
+  if(startsWith(l1, "chr\tstart\tend")){
+    dbtype <- "region"
+  }else if(startsWith(l1, "chr\tpos\tref\alt")){
+    dbtype <- "variant"
+  }else if(startsWith(l1, "chr\tpos")){
+    dbtype <- "position"
+  }else{
+    mystop("unkown header")
   }
-
-  l1_split <- strsplit(l1, "\t")[[1]]
-
-  if(length(l1_split) <= n) {
-    close_file(reader)
-    stop(paste("the first line of the file must be tab-separated and >=",
-               n + 1, "cols are needed!"))
-  }
-
-  l1_split
+  
+  list(header=strsplit(l1, "\t")[[1]],
+       dbtype=dbtype)
 }
 
-#' create indexed gds database of a region or variant file
-#' @param file a region or variant file (1-based)
-#' region file like this:
+#' Indexing a genomic coordinate (1-based) file
+#' @param file three types of files are allowed.
+#' region file:
 #' #chr start end gene score
 #' chr1 1 999 A 1.1
 #' chr2 9 222 B 2.2
-#' variant file should like this:
+#' variant file:
 #' #chr pos ref alt gene score (1-based)
 #' 1 22 A T gene1 1.1
 #' 2 44 AT A gene2 22
-#' @param dbtype one of c("region", "variant")
-#' @param gdsfile the gds file that will be created.
+#' position file:
+#' #chr pos gene score (1-based)
+#' 1 22 gene1 1.1
+#' 2 44 gene2 22
+
+#' @param file Input file
+#' @param dbname The gds file that will be created.
 #' @param binsize How many lines stored in a bin
-#' @param nbinread
-#' @param compress_args
-#' @param storage
+#' @param nbinread The number of bins to be read in one time
+#' @param compress_args List, a list of compress arguments for compression.
 #'
-indexdb <- function(file, dbtype, gdsfile=paste0(file, ".gds"),
+indexdb <- function(file, dbname=paste0(file, ".gds"),
                     compress_args, binsize=10000L, nbinread=1L){
   nlines <- binsize * nbinread
   stopifnot(file.exists(file))
-  stopifnot(!missing(dbtype))
-  stopifnot()
-  stopifnot(dbtype %in% c("region", "variant", "position"))
-  index_cols <- switch(
-    dbtype,
-    region=c("chr","start","end"),
-    position=c("chr","pos"),
-    variant=c("chr","pos","ref","alt"))
-
+  
   reader <- open_file(file)
-  header <- parse_header(reader=reader, index_cols=index_cols)
+  header <- parse_header(reader=reader)
+  dbtype <- header$dbtype
+  header <- header$header
+  
+  stopifnot(dbtype %in% c("region", "variant", "position"))
+  index_cols <- dbtype_to_index_cols(dbtype)
 
   if(missing(compress_args)){
     compress_args <- list()
@@ -217,9 +220,9 @@ indexdb <- function(file, dbtype, gdsfile=paste0(file, ".gds"),
     stop("cannot find data lines!")
   }
 
-  # make sure gdsfile is closed
-  close_gdsfile(gdsfile)
-  gds <- gdsfmt::createfn.gds(gdsfile)
+  # make sure dbname is closed
+  close_gds(dbname)
+  gds <- gdsfmt::createfn.gds(dbname)
   gdsfmt::add.gdsn(gds, "dbtype", val=dbtype)
   gdsfmt::add.gdsn(gds, "header", val=header)
   gdsfmt::add.gdsn(gds, "index_cols", val=index_cols)
@@ -261,7 +264,7 @@ indexdb <- function(file, dbtype, gdsfile=paste0(file, ".gds"),
 
   close_file(reader)
   gdsfmt::closefn.gds(gds)
-  gdsfmt::cleanup.gds(normalizePath(gdsfile), verbose=FALSE)
+  gdsfmt::cleanup.gds(normalizePath(dbname), verbose=FALSE)
   invisible()
 }
 
@@ -275,9 +278,70 @@ locate_bin <- function(DT, index, gds){
   DTdx
 }
 
+#' Open a genome database
+opendb <- function(file){
+  stopifnot(inherits(file, "character"))
+  file <- normalizePath(file, mustWork=T)
+  gds <- gdsfmt::openfn.gds(file, allow.duplicate=TRUE,allow.fork=TRUE)
+  header <- gdsfmt::read.gdsn(gdsfmt::index.gdsn(gds, "header"))
+  binsize <- gdsfmt::read.gdsn(gdsfmt::index.gdsn(gds, "binsize"))
+  dbtype <- gdsfmt::read.gdsn(gdsfmt::index.gdsn(gds, "dbtype"))
+  compress_args <- gdsfmt::read.gdsn(gdsfmt::index.gdsn(gds, "compress_args"))
+  
+  indexnode <- gdsfmt::index.gdsn(gds, "index")
+  index_attr <- gdsfmt::get.attr.gdsn(indexnode)
+  index <- gdsfmt::read.gdsn(indexnode)
+  if(is.null(index_attr[['sorted']])){
+    gdsfmt::closefn.gds(gds)
+    stop("not find the key of the index or index is not sorted!")
+  }else{
+    attr(index, 'sorted') <-  index_attr[['sorted']]
+  }
+  
+  if(!all.equal(key(index), c("chr","start","end"))){
+    gdsfmt::closefn.gds(gds)
+    stop("the database is not indexed with chr, start and end")
+  }
+  
+  datanode <- gdsfmt::index.gdsn(gds, "data")
+  allchrnms <- gdsfmt::ls.gdsn(datanode)
+  if(length(allchrnms)==0) {
+    gdsfmt::closefn.gds(gds)
+    stop("Can not find chromosomes in the database.")
+  }
+  chrnodes <- lapply(allchrnms, function(x) {gdsfmt::index.gdsn(datanode, path=x)})
+  names(chrnodes) <- allchrnms
+  
+  db <- list(
+    file=file,
+    gds = gds,
+    dbtype = dbtype,
+    header = header,
+    compress_args = compress_args,
+    binsize = binsize,
+    index = index,
+    chrnodes = chrnodes
+  )
+  class(db) <- "gds.db"
+  db
+}
+
+close.gds.db <- function(db){
+  stopifnot(inherits(db, "gds.db"))
+  gdsfmt::closefn.gds(db$gds)
+}
+
 fetchdb <- function(
-  gds, chr, pos, pos2, ref, alt, select, ops=NULL,
-  max_bin=2L, mc.cores=1,
+  db, 
+  chr, 
+  pos, 
+  pos2, 
+  ref, 
+  alt, 
+  select, 
+  ops=NULL,
+  max_bin=2L,
+  mc.cores=1,
   nomatch=NA,
   warn=F,
   allops = list(
@@ -286,8 +350,12 @@ fetchdb <- function(
     mean=mean,
     max=max,
     min=min,
-    paste=function(x)paste0(x, collapse=",")))
-{
+    paste=function(x)paste(x, collapse=","))){
+  
+  if(!inherits(db, "gds.db")){
+    stop("db is not a gds.db object, please use opendb first")
+  }
+  
   stopifnot(!missing(chr))
   chr <- as.character(chr)
   stopifnot(!missing(pos))
@@ -313,66 +381,41 @@ fetchdb <- function(
     stop("ref and pos2 should not be used at the same time")
   }
 
-  closegds <- F
-  if(inherits(gds, "character")){
-    gds <- gdsfmt::openfn.gds(gds, allow.duplicate=TRUE,allow.fork=TRUE)
-    closegds <- T
-  }
-
-  header <- gdsfmt::read.gdsn(gdsfmt::index.gdsn(gds, "header"))
+  if(is.null(max_bin)) max_bin <- ceiling(100000L/db$binsize)
+  
   if(missing(select)){
-    select <- setdiff(header, query_variables)
+    select <- setdiff(db$header, query_variables)
   }
 
-  if(!all(select %in% header)){
-    if(closegds) gdsfmt::closefn.gds(gds)
+  if(!all(select %in% db$header)){
     stop(paste("these selected cols:",
-               paste(select[!select %in% header], collapse=","),
-               "must be in the header of database:", paste(header, collapse=', ')))
+               paste(select[!select %in% db$header], collapse=","),
+               "must be in the header of database:", paste(db$header, collapse=', ')))
   }
 
   if(!is.null(ops)){
-    if(length(select)!=length(ops)){
-      if(closegds) gdsfmt::closefn.gds(gds)
-      stop("cols must be equal with select")
+    if(!all(select %in% names(ops))){
+      stop("if ops is used, please set ops for every select cols")
     }
-
-    if(!all(ops %in% names(allops))){
-      if(closegds) gdsfmt::closefn.gds(gds)
-      stop(paste("ops must be in:", paste(names(allops), collapse=",")))
+    ops <- ops[select]
+    
+    opsfunc <- list()
+    for(i in names(ops)){
+      if(is.function(ops[[i]])){
+        opsfunc[[i]] <- ops[[i]]
+      }else if(inherits(ops[[i]], "character")){
+        if(ops[[i]] %in% names(allops)){
+          opsfunc[[i]] <- allops[[ops[[i]]]]
+        }else{
+          opsfunc[[i]] <- get(ops[[i]])
+        }
+      }else{
+        stop("ops must be a function or character")
+      }
     }
-
-    opsfunc <- allops[ops]
-    names(opsfunc) <- select
   }
 
-  binsize <- gdsfmt::read.gdsn(gdsfmt::index.gdsn(gds, "binsize"))
-  if(is.null(max_bin)) max_bin <- ceiling(100000L/binsize)
-
-  indexnode <- gdsfmt::index.gdsn(gds, "index")
-  index_attr <- gdsfmt::get.attr.gdsn(indexnode)
-  index <- gdsfmt::read.gdsn(indexnode)
-  if(is.null(index_attr[['sorted']])){
-    if(closegds) gdsfmt::closefn.gds(gds)
-    stop("not find the key of the index!")
-  }else{
-    attr(index, 'sorted') <-  index_attr[['sorted']]
-  }
-  if(!all.equal(key(index), c("chr","start","end"))){
-    if(closegds) gdsfmt::closefn.gds(gds)
-    stop("the database is not indexed with chr, start and end")
-  }
-
-  datanode <- gdsfmt::index.gdsn(gds, "data")
-  allchrnms <- gdsfmt::ls.gdsn(datanode)
-  if(length(allchrnms)==0) {
-    if(closegds) gdsfmt::closefn.gds(gds)
-    stop("Can not find chromosomes in the database.")
-  }
-  chrnodes <- lapply(allchrnms, function(x) {gdsfmt::index.gdsn(datanode, path=x)})
-  names(chrnodes) <- allchrnms
-
-  isinchrs <- chr %in% allchrnms
+  isinchrs <- chr %in% names(db$chrnodes)
   if(warn) {
     if(any(!isinchrs)) {
       warning(paste("There are chromosomes not in the database:",
@@ -381,7 +424,6 @@ fetchdb <- function(
   }
 
   if(sum(isinchrs)==0) {
-    if(closegds) gdsfmt::closefn.gds(gds)
     if(warn){
       warning('All queried chromosomes are not found in the database, maybe need check their names.')
     }
@@ -391,14 +433,12 @@ fetchdb <- function(
   setnames(DT, query_variables)
   setkeyv(DT, query_variables)
 
-  dbtype <- gdsfmt::read.gdsn(gdsfmt::index.gdsn(gds, "dbtype"))
-
   # variant / region to region ####
-  if(dbtype == "region"){
+  if(db$dbtype == "region"){
     get_DTdxdb <- function(DTdx){
       bins <- unique(DTdx[, .(chr, i, isize, start_base, end_base)])
       f <- function(bi){
-        chr_node <- chrnodes[[bins$chr[bi]]]
+        chr_node <- db$chrnodes[[bins$chr[bi]]]
         start_bi <- cumsum(gdsfmt::read.gdsn(gdsfmt::index.gdsn(chr_node, "start"),
                                       start=bins$i[bi],
                                       count=bins$isize[bi])) + bins$start_base[bi]
@@ -428,11 +468,11 @@ fetchdb <- function(
   }
   # region to variant ####
   # query: chr pos pos2; dbtype: variant
-  if(dbtype %in% c("position", "variant") && !missing(pos2)){
+  if(db$dbtype %in% c("position", "variant") && !missing(pos2)){
     get_DTdxdb <- function(DTdx){
       bins <- unique(DTdx[, .(chr, i, isize, pos_base)])
       f <- function(bi){
-        chr_node <- chrnodes[[bins$chr[bi]]]
+        chr_node <- db$chrnodes[[bins$chr[bi]]]
         pos_bi <- cumsum(gdsfmt::read.gdsn(gdsfmt::index.gdsn(chr_node, "pos"),
                                     start=bins$i[bi],
                                     count=bins$isize[bi])) + bins$pos_base[bi]
@@ -461,11 +501,11 @@ fetchdb <- function(
   # query: chr pos;         dbtype: variant
   # query: chr pos ref;     dbtype: variant
   # query: chr pos ref alt; dbtype: variant
-  if(dbtype == c("position", "variant") && missing(pos2)){
+  if(db$dbtype == c("position", "variant") && missing(pos2)){
     get_DTdxdb <- function(DTdx){
       bins <- unique(DTdx[, .(chr, i, isize, pos_base)])
       f <- function(bi){
-        chr_node <- chrnodes[[bins$chr[bi]]]
+        chr_node <- db$chrnodes[[bins$chr[bi]]]
         pos_bi <- gdsfmt::read.gdsn(gdsfmt::index.gdsn(chr_node, "pos"),
                                     start=bins$i[bi],
                                     count=bins$isize[bi]) + bins$pos_base[bi]
@@ -487,9 +527,8 @@ fetchdb <- function(
     }
   }
 
-  DTdx <- locate_bin(DT=DT, index=index)
+  DTdx <- locate_bin(DT=DT, index=db$index)
   if(nrow(DTdx)==0L) {
-    if(closegds) gdsfmt::closefn.gds(gds)
     return(data.table())
   }
 
@@ -506,66 +545,32 @@ fetchdb <- function(
   }
   DTdxdb <- rbindlist(DTdxdb)
   if(nrow(DTdxdb) == 0 ) {
-    if(closegds) gdsfmt::closefn.gds(gds)
     return(data.table())
   }
   setkeyv(DTdxdb, query_variables)
-
+  
   if(!is.null(ops)){
-    DTops <- DTdxdb[, lapply(paste0("db.", select), function(x){
-      opsfunc[[x]](get(x))
+    DTdxdb <- DTdxdb[, lapply(paste0("db.", ..("select")), function(x){
+      opsfunc[[sub("^db.","",x)]](get(x))
     }), by=query_variables]
-    setnames(DTops, c(query_variables, paste0("db.", select)))
-
-    if(is.na(nomatch)){
-      DT0 <- setDT(lapply(query_variables, get))
-      setnames(DT0, query_variables)
-      for(col in paste0("db.", select)){
-        DT0[DTops, (col):=get(col), on=query_variables]
-      }
-      DTdxdb <- DT0
-    }
+    setnames(DTdxdb, c(query_variables, paste0("db.", select)))
   }
 
-  if(closegds) gdsfmt::closefn.gds(gds)
+  if(is.na(nomatch)){
+    DT0 <- setDT(lapply(query_variables, get))
+    setnames(DT0, query_variables)
+    for(col in paste0("db.", select)){
+      DT0[DTdxdb, (..("col")):=get(..("col")), on=..("query_variables")]
+    }
+    DTdxdb <- DT0
+  }
+
   DTdxdb
 }
 
-function (closeall = FALSE, verbose = TRUE)
-{
-  stopifnot(is.logical(closeall))
-  stopifnot(is.logical(verbose))
-  rv <- .Call(gdsGetConnection)
-  if (length(rv) > 0L) {
-    nm <- NULL
-    rd <- NULL
-    for (i in seq_along(rv)) {
-      names(rv[[i]]) <- c("filename", "id", "root", "readonly")
-      class(rv[[i]]) <- "gds.class"
-      nm <- c(nm, rv[[i]]$filename)
-      rd <- c(rd, rv[[i]]$readonly)
-    }
-    if (verbose & !closeall) {
-      print(data.frame(FileName = nm, ReadOnly = rd, State = rep("open",
-                                                                 length(rd))))
-    }
-  }
-  else rv <- NULL
-  if (closeall & !is.null(rv)) {
-    if (verbose) {
-      print(data.frame(FileName = nm, ReadOnly = rd, State = rep("closed",
-                                                                 length(rd))))
-    }
-    for (i in seq_along(rv)) closefn.gds(rv[[i]])
-    rv <- NULL
-  }
-  invisible(rv)
-}
-
-#' close gds file by file path or a object of gds class,
-#' if x is a file path,  all file handles connected to it will be closed.
-#' @param x a gds object or a file path
-close_gdsfile <- function(x){
+#' close gds file handle or close all gds file hanldes connected to the file.
+#' @param x a gds object or a file
+close_gds <- function(x){
   if(inherits(x, "gds.class")){
     gdsfmt::closefn.gds(x)
   }
@@ -586,4 +591,21 @@ close_gdsfile <- function(x){
     }
   }
   invisible()
+}
+
+dbtype_to_index_cols <- function(dbtype){
+  switch(
+    dbtype,
+    position=c("chr","pos"),
+    region=c("chr","start","end"),
+    variant=c("chr","pos","ref","alt")
+  )
+}
+
+print.gds.db <- function(db){
+  cat(paste0("file: ", db$file, "\n"))
+  cat(paste0("dbtype: ", db$dbtype, "\n"))
+  index_cols <- dbtype_to_index_cols(db$dbtype)
+  cat(paste0("index cols: ", paste0(index_cols, collapse=", "), "\n"))
+  cat(paste0("feature cols: ", paste(setdiff(db$header, index_cols), collapse=", "), "\n"))
 }
