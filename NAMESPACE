@@ -6,8 +6,10 @@ export(open_file, close_file)
 export(read_lines)
 
 export(open_vcf)
-export(read_vars)
 S3method(close, vcf)
+export(read_vars)
+export(tovcf)
+
 
 export(opendb)
 export(indexdb)
