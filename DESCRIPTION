@@ -1,18 +1,17 @@
 Package: data.vcf
 Type: Package
-Title: A very simple package for VCF manipulation based on data.table
-Version: 0.1.0
+Title: A fast and simple tool for genomic data storage, read and manipulation
+Version: 0.2.0
 Date: 2017-03-25
-Author: Your Name
-Maintainer: Your Name <your@email.com>
+Author: liqg
+Maintainer: liqg <liqg3@qq.com>
 Description: fast vcf read and manipulation.
 License: GPL (>= 2)
 Imports:
     Rcpp
 Depends:
-    data.table (>= 1.10.0)
+    data.table (>= 1.10.2)
 LinkingTo: Rcpp
 RoxygenNote: 5.0.1
 Suggests: knitr, rmarkdown
-VignetteBuilder: knitr
 LazyData: FALSE
