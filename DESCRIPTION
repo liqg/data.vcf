@@ -17,3 +17,5 @@ LinkingTo: Rcpp
 RoxygenNote: 5.0.1
 Suggests: knitr, rmarkdown
 LazyData: FALSE
+ByteCompile: true
+
