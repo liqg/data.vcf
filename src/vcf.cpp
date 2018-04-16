@@ -124,6 +124,7 @@ std::vector<std::vector<std::string> > resize_list_string (
   return out;
 }
 
+
 //' Split a str by sep into ikv list.
 //' @param x a string vector
 //' @return An list of {i, k, v}
@@ -238,8 +239,7 @@ std::vector<std::string> uniq_char(std::vector<std::string> x, std::string y="")
       s[k++] = x[i][0];
       for(int j=1; j<x[i].size(); j++){
         if(c ? (x[i][j-1] != c  || x[i][j] != c) : x[i][j] != x[i][j-1]){
-          s[k]=x[i][j];
-          k++;
+          s[k++]=x[i][j];
         }
       }
       s[k] = '\0';

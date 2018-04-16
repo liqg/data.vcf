@@ -568,7 +568,7 @@ fetchdb <- function(
   DTdxdb
 }
 
-#' close gds file handle or close all gds file hanldes connected to the file.
+#' close gds file handle or close all gds file hanldes connected to the file if a file name is provided.
 #' @param x a gds object or a file
 close_gds <- function(x){
   if(inherits(x, "gds.class")){
