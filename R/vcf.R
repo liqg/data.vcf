@@ -82,6 +82,85 @@ reformat_sample <- function(x, FORMAT_length){
   unlist(xs)
 }
 
+split_info <- function(x, info_keys=NULL, prefix="INFO."){
+  info_ikv <- setDT(str_to_ikv(x, sep=";"))
+  info_ikv <- info_ikv[!(i %in% which(x %in% c(".","",NA)))] # remove missing info
+  
+  if(!is.null(info_keys)){
+    info_ikv <- info_ikv[k %in% info_keys]
+  }
+  if(nrow(info_ikv) == 0 ) return(data.table())
+  
+  setkey(info_ikv, i, k)
+  info_ikv <- unique(info_ikv, by=c("i", "k"))
+  
+  info_dt <- dcast(info_ikv, i ~ k, value.var = "v")
+  setnames(info_dt, c(".varid", colnames(info_dt)[-1]))
+  idt <- data.table(.varid=1:length(x))
+  info_dt <- info_dt[idt, on=".varid"][, -1]
+  info_keys2 <- setdiff(info_keys, colnames(info_dt))
+  if(length(info_keys2)>0){
+    info_dt2 <- setDT(as.list(rep(NA_character_, length(info_keys2))))
+    setnames(info_dt2, info_keys2)
+    info_dt <- cbind(info_dt, info_dt2)
+  }
+  setnames(info_dt, paste0(prefix, colnames(info_dt)))
+  info_dt
+}
+
+split_format <- function(x, format_keys=NULL, prefix="FORMAT."){
+  stopifnot(inherits(x, "data.table"))
+  
+  if(!"FORMAT" %in% colnames(x)[1]){
+    stop("not found FORMAT cols")
+  }
+  
+  if(ncol(x)<2){
+    stop(">=2 cols are needed")
+  }
+  
+  # split sample format
+  splited_format <- strsplit(x$FORMAT, ":", fixed=TRUE)
+  FORMAT_length <- sapply(splited_format, length)
+  if(any(FORMAT_length == 0)){
+    stop("Empty string is not allowed in the FORMAT col.")
+  }
+  format_ikv <- data.table(
+    varid = rep(1:nrow(x), FORMAT_length),
+    k = unlist(splited_format))
+  
+  format_ikv <- cbind(
+    format_ikv,
+    setDT(lapply(x[,-1], function(y){
+      xs <- strsplit(y,":",fixed=T)
+      xs <- resize_list_string(xs, FORMAT_length, fill="")
+      unlist(xs)
+    })))
+  
+  if(!is.null(format_keys)){
+    format_ikv <-  format_ikv[k %in% format_keys]
+  }
+  setnames(format_ikv, c("varid", "k", colnames(x)[-1]))
+  unique(format_ikv, by=c("varid","k"))
+  format_dt <- dcast(format_ikv, varid ~ k, value.var = colnames(format_ikv)[3:ncol(format_ikv)])
+  newnames <- matrix(stringr::str_match(colnames(format_dt)[-1], "(.+)_([^_]+)")[,-1], ncol=2)
+  newnames <- paste0(newnames[,2], ".", newnames[,1])
+  setnames(format_dt, c("varid", newnames))
+  setkey(format_dt, varid)
+  idt <- data.table(varid=1:nrow(x))
+  format_dt <- format_dt[idt, on="varid"][, -1]
+  
+  format_keys2 <- setdiff(do.call(paste, c(as.list(expand.grid(format_keys, colnames(x)[-1])), sep=".")), colnames(format_dt))
+  if(length(format_keys2)>0){
+    format_dt2 <- setDT(as.list(rep(NA_character_, length(format_keys2))))
+    setnames(format_dt2, format_keys2)
+    format_dt <- cbind(format_dt, format_dt2)
+  }
+  setnames(format_dt, paste0(prefix, colnames(format_dt)))
+  format_dt
+}
+
+
 #' reformat INFO and FORMAT as varid, key, value tables
 #' @param lines data.table returned by read_body
 #' @return list a list of data.tables, including C7: cols1-7, INFO:, FORMAT: FORMAT and samples' genotype information.
@@ -169,38 +248,51 @@ split_vars <- function(variants, info_keys=NULL, format_keys=NULL){
 #' @param n The number of lines to be read
 #' @param info_keys a subset of INFO keys
 #' @param format_keys a subset of FORMAT keys
-#' @param convert FALSE for returning a VCF table, the default is TRUE, see
+#' @param split FALSE for returning a VCF table, the default is TRUE, see
 #' @details read_vars returns a data.table where the INFO and FORMAT are splited.
 #' INFO feilds are named as INFO.key, INFO.AF for example.
 #' FORMAT feilds are named as FORMAT.key.sampleid, FORMAT.GT.sample1 for example.
-read_vars <- function(vcf, n=0L, info_keys=NULL, format_keys=NULL, sample_ids=NULL, split=TRUE){
+read_vars <- function(vcf, n=0L, info_keys=NULL, format_keys=NULL, sample_ids=NULL, split_info=TRUE, split_format=TRUE){
   stopifnot(inherits(vcf, "vcf"))
   dt <- data.table()
   lines_dt <- read_body(vcf, n=n)
-  vcf$lines <- lines_dt
   
   if(nrow(lines_dt) == 0) return(dt)
   
   if(!is.null(sample_ids)){
     sample_ids <- unique(sample_ids)
-    id <- sample_ids %in% colnames(lines_dt)[-(1:9)]
-    if(any(!id)){
-      stop(paste0("unrecognized sample_ids: ", 
-                  paste(sample_ids[!id], collapse=","),
-                  ".\n must be in the: ",
-                  paste(colnames(lines_dt)[-(1:9)], collapse=", ")))
+    if(all(sample_ids == "")){
+      lines_dt <- lines_dt[, 1:8]
+    }else{
+      id <- sample_ids %in% colnames(lines_dt)[-(1:9)]
+      if(any(!id)){
+        stop(paste0("unrecognized sample_ids: ", 
+                    paste(sample_ids[!id], collapse=","),
+                    ".\n must be in the: ",
+                    paste(colnames(lines_dt)[-(1:9)], collapse=", ")))
+      }
+      lines_dt <- lines_dt[, c(colnames(lines_dt)[1:9], sample_ids), with=F]
     }
-    lines_dt <- lines_dt[, c(colnames(lines_dt)[1:9], sample_ids), with=F]
   }
   
-  if(!split) return(lines_dt)
+  dt <- lines_dt[, 1:7]
+  if(split_info){
+    dt <- cbind(dt, split_info(lines_dt$INFO, info_keys=info_keys))
+  }else{
+    dt <- lines_dt[, 1:8]
+  }
+  if(ncol(lines_dt)>9){
+    if(split_format){
+      dt <- cbind(dt, split_format(lines_dt[, 9:ncol(lines_dt)], format_keys=format_keys))
+    }else{
+      dt <- cbind(dt, lines_dt[, 9:ncol(lines_dt)])
+    }
+  }
   
-  dt <- reformat_body(lines_dt)
-  dt <- split_vars(dt, info_keys=info_keys, format_keys=format_keys)
   dt <- dt[, -1] #remove varid
-  
   dt
 }
+
 
 #' Convert a splited data.table to a standard VCF data.table
 #'
@@ -307,44 +399,4 @@ table_vcf <-function(infile, outfile, fields, n=1000L){
     fwrite(dt, outfile, append=T, sep="\t", col.names=FALSE)
   }
 }
-
-#' #' revert variants back to the vcf body table format.
-#' #' @param variants an object returned by reformat_body.
-#' #' @return data.table
-#' tobody <- function(variants){
-#'   if(!all(c("C7","INFO") %in% names(variants))){
-#'     stop("wrong variant object")
-#'   }else{
-#'     setkey(variants$C7, "varid")
-#'     setkey(variants$INFO, "varid")
-#'   }
-#' 
-#'   if("FORMAT" %in% names(variants)){
-#'     setkey(variants$FORMAT, "varid")
-#'   }
-#' 
-#'   lines <- copy(variants$C7)
-#' 
-#'   variants$INFO[, kv:=paste(k, v, sep="=")]
-#'   variants$INFO[is.na(v), kv:=paste(k, ".", sep="=")] # reset missing values
-#'   variants$INFO[v == "", kv:=as.character(k)] # reset flag info
-#'   info_dt <- variants$INFO[, .(INFO=paste(kv, collapse=";")), by="varid"]
-#'   lines[info_dt, INFO:=INFO]
-#'   lines[is.na(INFO), INFO:="."]
-#'   variants$INFO[, kv:=NULL]
-#' 
-#'   if("FORMAT" %in% names(variants)){
-#'     if(nrow(variants$FORMAT) > 0){
-#'       inds <- setdiff(colnames(variants$FORMAT), c("k","varid"))
-#'       varid_groups <- tapply(1:nrow(variants$FORMAT), variants$FORMAT$varid, c)
-#'       format_dt <- collapse_group(variants$FORMAT[, c("k", inds), with=FALSE], varid_groups, sep=":")
-#'       names(format_dt) <- c("FORMAT", inds)
-#'       format_dt$varid <- as.integer(names(varid_groups))
-#'       setDT(format_dt, key="varid")
-#'       lines <- merge(lines, format_dt[, c("varid","FORMAT", inds), with=F], all.x=TRUE)
-#'     }
-#'   }
-#'   lines[, -"varid"]
-#' }
-
 
