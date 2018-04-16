@@ -5,6 +5,8 @@ useDynLib(data.vcf)
 export(open_file, close_file)
 export(read_lines)
 
+export(read_body, reformat_body)
+
 export(open_vcf)
 S3method(close, vcf)
 export(read_vars)
