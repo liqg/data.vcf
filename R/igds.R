@@ -629,11 +629,14 @@ print.igds <- function(db){
   cat(paste0("feature cols: ", paste(setdiff(db$header, index_cols), collapse=", "), "\n"))
 }
 
-head.igds <- function(db, n){
+head.igds <- function(db, n=10){
   stopifnot(inherits(db, "igds"))
   
-  lapply(db$header, function(x){
-    v <- gdsfmt::index.gdsn(db$chrnodes[[1]], x)
-  })
+  a <- fetchdb(db, chr=db$index[["chr"]][[1]], 
+               pos=db$index[["start"]][[1]],
+               pos2=db$index[["end"]][[1]])
+  a <- a[, -c("pos", "pos2")]
   
+  setnames(a, sub("db.", "", colnames(a)))
+  head(a, n=n)
 }
