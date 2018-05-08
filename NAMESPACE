@@ -9,12 +9,12 @@ export(read_body, reformat_body)
 
 export(open_vcf)
 S3method(close, vcf)
-export(read_vars)
-export(split_vars, tovcf)
+export(read_vars, tovcf)
+export(split_info, split_format)
 
 
 export(opendb)
 export(indexdb)
 export(fetchdb)
-S3method(close, gds.db)
-S3method(print, gds.db)
+S3method(close, igds)
+S3method(print, igds)

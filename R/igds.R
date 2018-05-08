@@ -175,8 +175,16 @@ parse_header <- function(reader){
 #' @param nbinread The number of bins to be read in one time
 #' @param compress_args List, a list of compress arguments for compression.
 #'
-indexdb <- function(file, dbname=paste0(file, ".gds"),
-                    compress_args, binsize=10000L, nbinread=1L){
+indexdb <- function(
+  file, 
+  dbname=paste0(file, ".igds"),
+  compress_args, 
+  binsize=10000L,
+  nbinread=1L,
+  progress=FALSE){
+  
+  dbname.tmp <- paste0(dbname, ".tmp")
+  
   nlines <- binsize * nbinread
   stopifnot(file.exists(file))
   
@@ -221,8 +229,8 @@ indexdb <- function(file, dbname=paste0(file, ".gds"),
   }
 
   # make sure dbname is closed
-  close_gds(dbname)
-  gds <- gdsfmt::createfn.gds(dbname)
+  close_gds(dbname.tmp)
+  gds <- gdsfmt::createfn.gds(dbname.tmp)
   gdsfmt::add.gdsn(gds, "dbtype", val=dbtype)
   gdsfmt::add.gdsn(gds, "header", val=header)
   gdsfmt::add.gdsn(gds, "index_cols", val=index_cols)
@@ -231,31 +239,41 @@ indexdb <- function(file, dbname=paste0(file, ".gds"),
 
   chrstatus <- vector("integer") # how many bases were stored for each chromosome.
   index_l <- list()
+  total_records <- length(lines)
   repeat{
-    lines_table <- switch(
-      dbtype,
-      region=table_region_lines(lines),
-      position=table_position_lines(lines),
-      variant=table_position_lines(lines))
-
-    lines_table <- lines_table[, header_num, with=F]
-    setnames(lines_table, header)
-    setkeyv(lines_table, index_cols) # sorted is required for bin_region and bin_variant
-
-    lines_table <- split(lines_table, by="chr")# split by chrom
-
-    binlist <- switch(
-      dbtype,
-      region=lapply(lines_table, bin_region, binsize=binsize),
-      position=lapply(lines_table, bin_variant, binsize=binsize),
-      variant=lapply(lines_table, bin_variant, binsize=binsize))
-
-    index_l <- update_index(binlist, index_l=index_l, chrstatus=chrstatus)
-    chrstatus <- update_chrstatus(lines_table, chrstatus=chrstatus)
-    write_bin(binlist, gds=gds, dir="data", compress_args=compress_args)
-
+    if(length(lines) > 0){
+      total_records <- total_records + length(lines)
+      if(progress){
+        message(total_records, " records were stored\r", appendLF=FALSE)
+        flush.console()
+      }
+      lines_table <- switch(
+        dbtype,
+        region=table_region_lines(lines),
+        position=table_position_lines(lines),
+        variant=table_position_lines(lines))
+      
+      lines_table <- lines_table[, header_num, with=F]
+      setnames(lines_table, header)
+      setkeyv(lines_table, index_cols) # sorted is required for bin_region and bin_variant
+      
+      lines_table <- split(lines_table, by="chr")# split by chrom
+      
+      binlist <- switch(
+        dbtype,
+        region=lapply(lines_table, bin_region, binsize=binsize),
+        position=lapply(lines_table, bin_variant, binsize=binsize),
+        variant=lapply(lines_table, bin_variant, binsize=binsize))
+      
+      index_l <- update_index(binlist, index_l=index_l, chrstatus=chrstatus)
+      chrstatus <- update_chrstatus(lines_table, chrstatus=chrstatus)
+      write_bin(binlist, gds=gds, dir="data", compress_args=compress_args)
+    }
+    
     if(length(lines <- read_lines(reader=reader, n=nlines))==0) {break}
   }
+  
+  gdsfmt::add.gdsn(gds, "total_records", val=total_records)
 
   index <- rbindlist(index_l)
   setkey(index, chr, start, end)
@@ -265,6 +283,7 @@ indexdb <- function(file, dbname=paste0(file, ".gds"),
   close_file(reader)
   gdsfmt::closefn.gds(gds)
   gdsfmt::cleanup.gds(normalizePath(dbname), verbose=FALSE)
+  file.rename(dbname.tmp, dbname)
   invisible()
 }
 
@@ -322,12 +341,12 @@ opendb <- function(file){
     index = index,
     chrnodes = chrnodes
   )
-  class(db) <- "gds.db"
+  class(db) <- "igds"
   db
 }
 
-close.gds.db <- function(db){
-  stopifnot(inherits(db, "gds.db"))
+close.igds <- function(db){
+  stopifnot(inherits(db, "igds"))
   gdsfmt::closefn.gds(db$gds)
 }
 
@@ -352,8 +371,8 @@ fetchdb <- function(
     min=min,
     paste=function(x)paste(x, collapse=","))){
   
-  if(!inherits(db, "gds.db")){
-    stop("db is not a gds.db object, please use opendb first")
+  if(!inherits(db, "igds")){
+    stop("db is not a igds object, please use opendb first")
   }
   
   stopifnot(!missing(chr))
@@ -602,7 +621,7 @@ dbtype_to_index_cols <- function(dbtype){
   )
 }
 
-print.gds.db <- function(db){
+print.igds <- function(db){
   cat(paste0("file: ", db$file, "\n"))
   cat(paste0("dbtype: ", db$dbtype, "\n"))
   index_cols <- dbtype_to_index_cols(db$dbtype)
