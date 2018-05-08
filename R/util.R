@@ -5,11 +5,11 @@
   get(x, parent.frame(4))
 }
 
-set_cols <- function(x, funcs){
+set_colclass <- function(x, funcs){
   for(i in names(funcs)){
    if(i %in% colnames(x)){
      f <- funcs[[i]]
-     if(!is.function(f)){
+     if(!is.function(f) && is.character(f)){
        f <- get(f)
      }
      x[, (..("i")):=..("f")(get(..("i")))]
