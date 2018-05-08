@@ -627,6 +627,8 @@ print.igds <- function(db){
   index_cols <- dbtype_to_index_cols(db$dbtype)
   cat(paste0("index cols: ", paste0(index_cols, collapse=", "), "\n"))
   cat(paste0("feature cols: ", paste(setdiff(db$header, index_cols), collapse=", "), "\n"))
+  cat(paste0("total bins: ", nrow(db$index), "\n"))
+  cat(paste0("total records: ", sum(db$index$isize), "\n"))
 }
 
 head.igds <- function(db, n=10){
