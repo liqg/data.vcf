@@ -575,11 +575,11 @@ fetchdb <- function(
     setnames(DTdxdb, c(query_variables, paste0("db.", select)))
   }
 
-  if(is.na(nomatch)){
-    DT0 <- setDT(lapply(query_variables, get))
+  if(is.na(nomatch) & !is.null(ops)){
+    DT0 <- setDT(lapply(query_variables, function(x) get(x)))
     setnames(DT0, query_variables)
     for(col in paste0("db.", select)){
-      DT0[DTdxdb, (..("col")):=get(..("col")), on=..("query_variables")]
+      DT0[DTdxdb, (..("col")):=get(..("col")), on=query_variables]
     }
     DTdxdb <- DT0
   }
@@ -627,4 +627,13 @@ print.igds <- function(db){
   index_cols <- dbtype_to_index_cols(db$dbtype)
   cat(paste0("index cols: ", paste0(index_cols, collapse=", "), "\n"))
   cat(paste0("feature cols: ", paste(setdiff(db$header, index_cols), collapse=", "), "\n"))
+}
+
+head.igds <- function(db, n){
+  stopifnot(inherits(db, "igds"))
+  
+  lapply(db$header, function(x){
+    v <- gdsfmt::index.gdsn(db$chrnodes[[1]], x)
+  })
+  
 }
