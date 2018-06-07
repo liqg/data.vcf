@@ -188,7 +188,7 @@ parse_header <- function(reader){
 indexdb <- function(
   file, 
   dbname=paste0(file, ".igds"),
-  compress_args, 
+  compress_args=list(), 
   binsize=10000L,
   nbinread=1L,
   progress=FALSE){
@@ -206,13 +206,6 @@ indexdb <- function(
   stopifnot(dbtype %in% c("region", "variant", "position"))
   index_cols <- dbtype_to_index_cols(dbtype)
 
-  if(missing(compress_args)){
-    compress_args <- list()
-    for(i in setdiff(header, index_cols)){
-      compress_args[[i]] <- list(compress="LZ4_RA")
-    }
-  }
-  
   stopifnot(is.list(compress_args))
 
   if(any(names(compress_args) %in% index_cols)){
@@ -224,12 +217,14 @@ indexdb <- function(
     close_file(reader)
     stop("cols in compress_args should be the header")
   }
-  header_num <- match(c(index_cols, names(compress_args)), header)
-  header <- c(index_cols, names(compress_args))
 
-  for(i in names(compress_args)){
-    if(is.null(compress_args[[i]][["compress"]]))
-      compress_args[[i]][["compress"]] <- "LZ4_RA"
+  for(i in setdiff(header, index_cols)){
+    if(is.null(compress_args[[i]])){
+      compress_args[[i]] <- list(compress="LZ4_RA")
+    }else{
+      if(is.null(compress_args[[i]][["compress"]]))
+        compress_args[[i]][["compress"]] <- "LZ4_RA"
+    }
   }
 
   lines <- read_lines(reader=reader, n=nlines)
@@ -265,7 +260,7 @@ indexdb <- function(
         variant=table_position_lines(lines, type_dectect))
       type_dectect <- FALSE
       
-      lines_table <- lines_table[, header_num, with=F]
+      #lines_table <- lines_table[, header_num, with=F]
       setnames(lines_table, header)
       setkeyv(lines_table, index_cols) # sorted is required for bin_region and bin_variant
       
