@@ -150,7 +150,7 @@ parse_header <- function(reader){
   
   if(startsWith(l1, "chr\tstart\tend")){
     dbtype <- "region"
-  }else if(startsWith(l1, "chr\tpos\tref\alt")){
+  }else if(startsWith(l1, "chr\tpos\tref\talt")){
     dbtype <- "variant"
   }else if(startsWith(l1, "chr\tpos")){
     dbtype <- "position"
