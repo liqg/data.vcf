@@ -1,15 +1,23 @@
-table_region_lines <- function(lines){
-  dt <- fread(paste0(paste(lines, collapse="\n"),'\n'), header=F, sep="\t")
+table_region_lines <- function(lines, type_detect){
+  if(type_detect){
+    dt <- fread(paste0(paste(lines, collapse="\n"),'\n'), header=F, sep="\t")
+  }else{
+    dt <- setDT(tstrsplit(lines, split="\t", fixed=TRUE))
+  }
   dt[, V1:=as.character(V1)]
-  dt[, V2:=as.integer(V2)]
-  dt[, V3:=as.integer(V3)]
+  suppressWarnings(dt[, V2:=as.integer(V2)])
+  suppressWarnings(dt[, V3:=as.integer(V3)])
   dt
 }
 
-table_position_lines <- function(lines){
-  dt <- fread(paste0(paste(lines, collapse="\n"),'\n'), header=F, sep="\t")
+table_position_lines <- function(lines, type_detect){
+  if(type_detect){
+    dt <- fread(paste0(paste(lines, collapse="\n"),'\n'), header=F, sep="\t")
+  }else{
+    dt <- setDT(tstrsplit(lines, split="\t", fixed=TRUE))
+  }
   dt[, V1:=as.character(V1)]
-  dt[, V2:=as.integer(V2)]
+  suppressWarnings(dt[, V2:=as.integer(V2)])
   dt
 }
 
@@ -168,6 +176,8 @@ parse_header <- function(reader){
 #' #chr pos gene score (1-based)
 #' 1 22 gene1 1.1
 #' 2 44 gene2 22
+#' 
+#' pv=6MB/s
 
 #' @param file Input file
 #' @param dbname The gds file that will be created.
@@ -183,7 +193,7 @@ indexdb <- function(
   nbinread=1L,
   progress=FALSE){
   
-  dbname.tmp <- paste0(dbname, ".tmp")
+  dbname.tmp <- paste0(dbname, ".indexdb.tmp")
   
   nlines <- binsize * nbinread
   stopifnot(file.exists(file))
@@ -229,7 +239,7 @@ indexdb <- function(
   }
 
   # make sure dbname is closed
-  close_gds(dbname.tmp)
+  close_gdsfile(dbname.tmp)
   gds <- gdsfmt::createfn.gds(dbname.tmp)
   gdsfmt::add.gdsn(gds, "dbtype", val=dbtype)
   gdsfmt::add.gdsn(gds, "header", val=header)
@@ -239,7 +249,8 @@ indexdb <- function(
 
   chrstatus <- vector("integer") # how many bases were stored for each chromosome.
   index_l <- list()
-  total_records <- length(lines)
+  total_records <- 0
+  type_dectect <- TRUE # only detect the data types in the first round
   repeat{
     if(length(lines) > 0){
       total_records <- total_records + length(lines)
@@ -249,15 +260,23 @@ indexdb <- function(
       }
       lines_table <- switch(
         dbtype,
-        region=table_region_lines(lines),
-        position=table_position_lines(lines),
-        variant=table_position_lines(lines))
+        region=table_region_lines(lines, type_dectect),
+        position=table_position_lines(lines, type_dectect),
+        variant=table_position_lines(lines, type_dectect))
+      type_dectect <- FALSE
       
       lines_table <- lines_table[, header_num, with=F]
       setnames(lines_table, header)
       setkeyv(lines_table, index_cols) # sorted is required for bin_region and bin_variant
       
-      lines_table <- split(lines_table, by="chr")# split by chrom
+      # split by chr
+      uniq_chrs <- unique(lines_table$chr)
+      if(length(uniq_chrs)==1){
+        lines_table <- list(lines_table)
+        names(lines_table) <- uniq_chrs
+      }else{
+        lines_table <- split(lines_table, by="chr")# split by chrom
+      }
       
       binlist <- switch(
         dbtype,
@@ -282,7 +301,7 @@ indexdb <- function(
 
   close_file(reader)
   gdsfmt::closefn.gds(gds)
-  gdsfmt::cleanup.gds(normalizePath(dbname), verbose=FALSE)
+  gdsfmt::cleanup.gds(normalizePath(dbname.tmp), verbose=FALSE)
   file.rename(dbname.tmp, dbname)
   invisible()
 }
@@ -472,13 +491,13 @@ fetchdb <- function(
         })
         setDT(c(list(chr_bi), list(start_bi), list(end_bi), select_bi))
       }
-      db <- lapply(1:nrow(bins), f) %>% rbindlist
+      DTdb <- lapply(1:nrow(bins), f) %>% rbindlist
 
-      setnames(db, paste0("db.", c("chr","start", "end", select)))
-      setkeyv(db, c("db.chr", "db.start", "db.end"))
+      setnames(DTdb, paste0("db.", c("chr","start", "end", select)))
+      setkeyv(DTdb, c("db.chr", "db.start", "db.end"))
 
       DTdxdb <- foverlaps(DTdx,
-                        db,
+                          DTdb,
                         by.x=c("chr","pos","pos2"),
                         by.y=c("db.chr","db.start","db.end"), nomatch=0)
       DTdxdb <- DTdxdb[, c(query_variables, paste0("db.", c("start", "end", select))), with=F]
@@ -503,12 +522,12 @@ fetchdb <- function(
         })
         setDT(c(list(chr_bi),list(pos_bi),list(pos_bi), select_bi))
       }
-      db <- lapply(1:nrow(bins), f) %>% rbindlist
-      setnames(db, paste0("db.", c(c("chr","pos","pos2"), select)))
-      setkeyv(db, paste0("db.", c("chr","pos","pos2")))
+      DTdb <- lapply(1:nrow(bins), f) %>% rbindlist
+      setnames(DTdb, paste0("db.", c(c("chr","pos","pos2"), select)))
+      setkeyv(DTdb, paste0("db.", c("chr","pos","pos2")))
 
       DTdxdb <- foverlaps(DTdx,
-                          db,
+                          DTdb,
                           by.x=c("chr","pos","pos2"),
                           by.y=paste0("db.", c("chr","pos","pos2")), nomatch=0) %>%
         .[, c(query_variables, paste0("db.", c("pos", select))), with=F]
@@ -525,9 +544,9 @@ fetchdb <- function(
       bins <- unique(DTdx[, .(chr, i, isize, pos_base)])
       f <- function(bi){
         chr_node <- db$chrnodes[[bins$chr[bi]]]
-        pos_bi <- gdsfmt::read.gdsn(gdsfmt::index.gdsn(chr_node, "pos"),
+        pos_bi <- cumsum(gdsfmt::read.gdsn(gdsfmt::index.gdsn(chr_node, "pos"),
                                     start=bins$i[bi],
-                                    count=bins$isize[bi]) + bins$pos_base[bi]
+                                    count=bins$isize[bi])) + bins$pos_base[bi]
         chr_bi <- rep(bins$chr[bi], length(pos_bi))
         select_bi <- lapply(c(setdiff(query_variables, c("chr","pos")), select), function(col){
           gdsfmt::read.gdsn(gdsfmt::index.gdsn(chr_node, col),
@@ -536,11 +555,11 @@ fetchdb <- function(
         })
         setDT(c(list(chr_bi),list(pos_bi),select_bi))
       }
-      db <- lapply(1:nrow(bins), f) %>% rbindlist
-      setnames(db, paste0("db.", c(query_variables, select)))
-      setkeyv(db, paste0("db.", query_variables))
+      DTdb <- lapply(1:nrow(bins), f) %>% rbindlist
+      setnames(DTdb, paste0("db.", c(query_variables, select)))
+      setkeyv(DTdb, paste0("db.", query_variables))
 
-      DTdxdb <- merge(DTdx, db, by.x=query_variables, by.y=paste0("db.", query_variables)) %>%
+      DTdxdb <- merge(DTdx, DTdb, by.x=query_variables, by.y=paste0("db.", query_variables)) %>%
         .[, c(query_variables, paste0("db.", select)), with=F]
       DTdxdb
     }
@@ -589,7 +608,7 @@ fetchdb <- function(
 
 #' close gds file handle or close all gds file hanldes connected to the file if a file name is provided.
 #' @param x a gds object or a file
-close_gds <- function(x){
+close_gdsfile <- function(x){
   if(inherits(x, "gds.class")){
     gdsfmt::closefn.gds(x)
   }
@@ -622,12 +641,15 @@ dbtype_to_index_cols <- function(dbtype){
 }
 
 print.igds <- function(db){
+  stopifnot(inherits(db, "igds"))
+  
   cat(paste0("file: ", db$file, "\n"))
   cat(paste0("dbtype: ", db$dbtype, "\n"))
   index_cols <- dbtype_to_index_cols(db$dbtype)
   cat(paste0("index cols: ", paste0(index_cols, collapse=", "), "\n"))
   cat(paste0("feature cols: ", paste(setdiff(db$header, index_cols), collapse=", "), "\n"))
   cat(paste0("total bins: ", nrow(db$index), "\n"))
+  cat(paste0("bin size: ", nrow(db$binsize), "\n"))
   cat(paste0("total records: ", sum(db$index$isize), "\n"))
 }
 
