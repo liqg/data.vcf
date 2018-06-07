@@ -58,6 +58,9 @@ read_body <- function(vcf, n=0){
   vcf$nvar <- vcf$nvar + length(lines)
 
   lines <- tstrsplit(lines, split="\t", fixed=TRUE)
+  if(length(lines) == 8 & length(vcf$header) == 9){
+    vcf$header <- vcf$header[1:8]
+  }
   if(length(vcf$header) != length(lines)){
     stop("The number of cols in the body must be equal to that in the header line!")
   }
