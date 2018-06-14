@@ -247,6 +247,7 @@ indexdb <- function(
   total_records <- 0
   type_dectect <- TRUE # only detect the data types in the first round
   repeat{
+    invisible(gc())
     if(length(lines) > 0){
       total_records <- total_records + length(lines)
       if(progress){
@@ -376,6 +377,9 @@ fetchdb <- function(
   max_bin=2L,
   mc.cores=1,
   nomatch=NA,
+  ol.minoverlap=1L,
+  ol.type="any",
+  ol.mult="all",
   warn=F,
   allops = list(
     first=function(x){x[1]},
@@ -494,7 +498,11 @@ fetchdb <- function(
       DTdxdb <- foverlaps(DTdx,
                           DTdb,
                         by.x=c("chr","pos","pos2"),
-                        by.y=c("db.chr","db.start","db.end"), nomatch=0)
+                        by.y=c("db.chr","db.start","db.end"), 
+                        nomatch=0,
+                        minoverlap=ol.minoverlap,
+                        type=ol.type,
+                        mult=ol.mult)
       DTdxdb <- DTdxdb[, c(query_variables, paste0("db.", c("start", "end", select))), with=F]
       DTdxdb
     }
@@ -524,7 +532,11 @@ fetchdb <- function(
       DTdxdb <- foverlaps(DTdx,
                           DTdb,
                           by.x=c("chr","pos","pos2"),
-                          by.y=paste0("db.", c("chr","pos","pos2")), nomatch=0) %>%
+                          by.y=paste0("db.", c("chr","pos","pos2")), 
+                          nomatch=0,
+                          minoverlap=ol.minoverlap,
+                          type=ol.type,
+                          mult=ol.mult) %>%
         .[, c(query_variables, paste0("db.", c("pos", select))), with=F]
       DTdxdb
     }
@@ -645,7 +657,7 @@ print.igds <- function(db){
   cat(paste0("feature cols: ", paste(setdiff(db$header, index_cols), collapse=", "), "\n"))
   cat(paste0("total bins: ", nrow(db$index), "\n"))
   cat(paste0("bin size: ", nrow(db$binsize), "\n"))
-  cat(paste0("total records: ", sum(db$index$isize), "\n"))
+  cat(paste0("total records: ", sum(as.numeric(db$index$isize)), "\n"))
 }
 
 head.igds <- function(db, n=10){
