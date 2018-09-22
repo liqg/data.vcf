@@ -374,7 +374,7 @@ fetchdb <- function(
   alt, 
   select, 
   ops=NULL,
-  max_bin=2L,
+  max_bin=NULL,
   mc.cores=1,
   nomatch=NA,
   ol.minoverlap=1L,
@@ -407,10 +407,16 @@ fetchdb <- function(
     query_variables <- c(query_variables, "pos2")
   }
   if(!missing(ref)){
+    if(db$dbtype == "position"){
+      stop("ref should not be used when db$dbtype is position")
+    }
     stopifnot(length(chr)==length(ref))
     query_variables <- c(query_variables, "ref")
   }
   if(!missing(alt)){
+    if(db$dbtype == "position"){
+      stop("alt should not be used when db$dbtype is position")
+    }
     stopifnot(length(chr)==length(alt))
     query_variables <- c(query_variables, "alt")
   }
@@ -421,7 +427,7 @@ fetchdb <- function(
   if(!missing(pos2) & !missing(ref)){
     stop("ref and pos2 should not be used at the same time")
   }
-
+  
   if(is.null(max_bin)) max_bin <- ceiling(100000L/db$binsize)
   
   if(missing(select)){
@@ -473,7 +479,7 @@ fetchdb <- function(
   DT <- setDT(lapply(query_variables, function(x) {get(x)[isinchrs]}))
   setnames(DT, query_variables)
   setkeyv(DT, query_variables)
-
+  
   # variant / region to region ####
   if(db$dbtype == "region"){
     get_DTdxdb <- function(DTdx){
