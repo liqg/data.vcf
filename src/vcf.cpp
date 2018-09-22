@@ -35,6 +35,7 @@ XPtr_gz_reader open_file(std::string path){
 // [[Rcpp::export]]
 void close_file(XPtr_gz_reader reader){
   gzclose(reader->con);
+  reader->con = NULL;
 }
 
 //' read n lines from the file.
