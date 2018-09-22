@@ -393,7 +393,7 @@ fetchdb <- function(
     stop("db is not a igds object, please use opendb first")
   }
   
-  if(db$dbtype %in% c("variant", "region", "position")){
+  if(!(db$dbtype %in% c("variant", "region", "position"))){
     stop("dbtype is not in variant, region, position ")
   }
   
