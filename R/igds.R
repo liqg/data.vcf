@@ -2,7 +2,7 @@ table_region_lines <- function(lines, type_detect){
   if(type_detect){
     dt <- fread(paste0(paste(lines, collapse="\n"),'\n'), header=F, sep="\t")
   }else{
-    dt <- setDT(tstrsplit(lines, split="\t", fixed=TRUE))
+    dt <- setDT(tstrsplit2(lines, split="\t", fixed=TRUE))
   }
   dt[, V1:=as.character(V1)]
   suppressWarnings(dt[, V2:=as.integer(V2)])
@@ -14,7 +14,7 @@ table_position_lines <- function(lines, type_detect){
   if(type_detect){
     dt <- fread(paste0(paste(lines, collapse="\n"),'\n'), header=F, sep="\t")
   }else{
-    dt <- setDT(tstrsplit(lines, split="\t", fixed=TRUE))
+    dt <- setDT(tstrsplit2(lines, split="\t", fixed=TRUE))
   }
   dt[, V1:=as.character(V1)]
   suppressWarnings(dt[, V2:=as.integer(V2)])
@@ -158,7 +158,7 @@ parse_header <- function(reader){
     mystop("unkown header")
   }
   
-  list(header=strsplit(l1, "\t")[[1]],
+  list(header=strsplit2(l1, "\t")[[1]],
        dbtype=dbtype)
 }
 
@@ -393,6 +393,10 @@ fetchdb <- function(
     stop("db is not a igds object, please use opendb first")
   }
   
+  if(db$dbtype %in% c("variant", "region", "position")){
+    stop("dbtype is not in variant, region, position ")
+  }
+  
   stopifnot(!missing(chr))
   chr <- as.character(chr)
   stopifnot(!missing(pos))
@@ -546,7 +550,7 @@ fetchdb <- function(
   # query: chr pos;         dbtype: variant
   # query: chr pos ref;     dbtype: variant
   # query: chr pos ref alt; dbtype: variant
-  if(db$dbtype == c("position", "variant") && missing(pos2)){
+  if(db$dbtype %in% c("position", "variant") && missing(pos2)){
     get_DTdxdb <- function(DTdx){
       bins <- unique(DTdx[, .(chr, i, isize, pos_base)])
       f <- function(bi){
@@ -605,7 +609,7 @@ fetchdb <- function(
     DT0 <- setDT(lapply(query_variables, function(x) get(x)))
     setnames(DT0, query_variables)
     for(col in paste0("db.", select)){
-      DT0[DTdxdb, (..("col")):=get(..("col")), on=query_variables]
+      DT0[DTdxdb, (get("col")):=get(..("col")), on=query_variables]
     }
     DTdxdb <- DT0
   }

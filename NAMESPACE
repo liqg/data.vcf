@@ -19,3 +19,7 @@ export(fetchdb)
 S3method(close, igds)
 S3method(print, igds)
 S3method(head, igds)
+
+export(`..`)
+export(strsplit2)
+export(tstrsplit2)

@@ -14,7 +14,7 @@ open_vcf <- function(file){
   }
   # header line
   if(substr(l, 1, 4) == "#CHR"){
-    header <- strsplit(l, "\t", fixed=T)[[1]]
+    header <- strsplit2(l, "\t", fixed=T)[[1]]
     header <- sub("^#","", header)
   }else{
     stop("can not find header")
@@ -57,7 +57,7 @@ read_body <- function(vcf, n=0){
   }
   vcf$nvar <- vcf$nvar + length(lines)
 
-  lines <- tstrsplit(lines, split="\t", fixed=TRUE)
+  lines <- tstrsplit2(lines, split="\t", fixed=TRUE)
   if(length(lines) == 8 & length(vcf$header) == 9){
     vcf$header <- vcf$header[1:8]
   }
@@ -77,7 +77,7 @@ read_body <- function(vcf, n=0){
 #' @param FORMAT_length a length vector of FORMAT feilds.
 #' @return a char vector.
 reformat_sample <- function(x, FORMAT_length){
-  xs <- strsplit(x,":",fixed=T)
+  xs <- strsplit2(x,":",fixed=T)
   # ensure that the length of splited sample col is same as the splited format col.
   if(!all(sapply(xs, length) == FORMAT_length)){
     xs <- resize_list_string(xs, FORMAT_length, fill="")
@@ -85,14 +85,26 @@ reformat_sample <- function(x, FORMAT_length){
   unlist(xs)
 }
 
+str_to_ikv2 <- function(x, sep=";"){
+  xs <- strsplit2(x, split=";", fixed=T)
+  ikv <- data.table(i=rep(seq_along(x), sapply(xs, length)))
+  kv <- strsplit2(unlist(xs, recursive=F, use.names=F), split="=", fixed=T)
+  kv <- resize_list_string(kv, rep(2, length(kv)))
+  ikv <- cbind(ikv, do.call(rbind, kv))
+  setnames(ikv, c("i", "k", "v"))
+  ikv
+}
+
 split_info <- function(x, info_keys=NULL, prefix="INFO."){
   info_ikv <- setDT(str_to_ikv(x, sep=";"))
   info_ikv <- info_ikv[!(i %in% which(x %in% c(".","",NA)))] # remove missing info
-
+  
   if(!is.null(info_keys)){
     info_ikv <- info_ikv[k %in% info_keys]
   }
-  if(nrow(info_ikv) == 0 ) return(data.table())
+  if(nrow(info_ikv) == 0 ) {
+    return(data.table())
+  }
 
   setkey(info_ikv, i, k)
   info_ikv <- unique(info_ikv, by=c("i", "k"))
@@ -123,7 +135,7 @@ split_format <- function(x, format_keys=NULL, prefix="FORMAT."){
   }
 
   # split sample format
-  splited_format <- strsplit(x$FORMAT, ":", fixed=TRUE)
+  splited_format <- strsplit2(x$FORMAT, ":", fixed=TRUE)
   FORMAT_length <- sapply(splited_format, length)
   if(any(FORMAT_length == 0)){
     stop("Empty string is not allowed in the FORMAT col.")
@@ -135,7 +147,7 @@ split_format <- function(x, format_keys=NULL, prefix="FORMAT."){
   format_ikv <- cbind(
     format_ikv,
     setDT(lapply(x[,-1], function(y){
-      xs <- strsplit(y,":",fixed=T)
+      xs <- strsplit2(y,":",fixed=T)
       xs <- resize_list_string(xs, FORMAT_length, fill="")
       unlist(xs)
     })))
@@ -159,7 +171,7 @@ split_format <- function(x, format_keys=NULL, prefix="FORMAT."){
 
   format_keys2 <- setdiff(do.call(paste, c(as.list(expand.grid(format_keys, colnames(x)[-1])), sep=".")), colnames(format_dt))
   if(length(format_keys2)>0){
-    format_dt[, ..("format_keys2"):=NA_character_]
+    format_dt[, get("format_keys2"):=NA_character_]
   }
   setnames(format_dt, paste0(prefix, colnames(format_dt)))
   format_dt
@@ -183,7 +195,7 @@ reformat_body <- function(lines, varid_offset=0){
 
   # split sample format
   if(ncol(lines) >= 9){
-    splited_format <- strsplit(lines$FORMAT, ":", fixed=TRUE)
+    splited_format <- strsplit2(lines$FORMAT, ":", fixed=TRUE)
     FORMAT_length <- sapply(splited_format, length)
     if(any(FORMAT_length == 0)){
       stop("Empty string is not allowed in the FORMAT col.")
@@ -257,12 +269,32 @@ split_vars <- function(variants, info_keys=NULL, format_keys=NULL){
 #' @details read_vars returns a data.table where the INFO and FORMAT are splited.
 #' INFO feilds are named as INFO.key, INFO.AF for example.
 #' FORMAT feilds are named as FORMAT.key.sampleid, FORMAT.GT.sample1 for example.
-read_vars <- function(vcf, n=0L, info_keys, format_keys, sample_ids){
+read_vars <- function(
+  vcf, 
+  n=0L, 
+  info_keys, 
+  format_keys, 
+  sample_ids, 
+  alt_break=FALSE, 
+  info_keys_break=c("AC", "AF"), 
+  format_keys_break=c("GT", "AD"))
+{
+  info_keys_break <- paste0("INFO.", info_keys_break)
+  format_keys_break <- paste0("FORMAT.", format_keys_break)
+  
+  if(is.character(vcf)){
+    vcf <- open_vcf(vcf)
+    
+  }
+  
   stopifnot(inherits(vcf, "vcf"))
   dt <- data.table()
   lines_dt <- read_body(vcf, n=n)
+  if("POS" %in% colnames(lines_dt)){
+    lines_dt[, POS:=as.integer(POS)]
+  }
   if(nrow(lines_dt) == 0) return(dt)
-
+  
   if(!missing(sample_ids)){
     sample_ids <- unique(sample_ids)
     id <- sample_ids %in% colnames(lines_dt)[-(1:9)]
@@ -274,22 +306,83 @@ read_vars <- function(vcf, n=0L, info_keys, format_keys, sample_ids){
     }
     lines_dt <- lines_dt[, c(colnames(lines_dt)[1:9], sample_ids), with=F]
   }
-
+  
   dt <- lines_dt[, 1:7]
+  alts <- strsplit2(dt$ALT, ",", fixed=TRUE)
+  alts_count <- sapply(alts, length)
+  alt_break <- alt_break & any(alts_count > 1)
+  if(alt_break){
+    nms <- colnames(dt)
+    dt <- setDT(lapply(nms, function(x){
+      if(x == "ALT"){
+        res <- unlist(alts, use.names=F)
+      }else{
+        res <- rep(dt[[x]], alts_count)
+      }
+      res
+    }))
+    setnames(dt, nms)
+  }
+  
   if(!missing(info_keys)){
-    dt <- cbind(dt, split_info(lines_dt$INFO, info_keys=info_keys))
+    info_dt <- split_info(lines_dt$INFO, info_keys=info_keys)
+    if(nrow(info_dt)>0) {
+      if(alt_break){
+        nms <- colnames(info_dt)
+        info_dt <- setDT(lapply(nms, function(x){
+          if(x %in% info_keys_break) {
+            res <- strsplit2(info_dt[[x]], ",", fixed=TRUE)
+            if(any(sapply(res, length) != alts_count)){
+              res <- unlist(resize_list_string(res, alts_count, fill=""), use.names=F)
+            }else{
+              res <- unlist(res, use.names=F)
+            }
+          }else{
+            res <- rep(info_dt[[x]], alts_count)
+          }
+          res
+        }))
+        setnames(info_dt, nms)
+      }
+      
+      dt <- cbind(dt, info_dt)
+    }
   }else{
     dt <- lines_dt[, 1:8]
   }
-
+  
   if(ncol(lines_dt)>9){
+    fmt_dt <- lines_dt[, 9:ncol(lines_dt), with=FALSE]
+    
     if(!missing(format_keys)){
-      dt <- cbind(dt, split_format(lines_dt[, 9:ncol(lines_dt), with=FALSE], format_keys=format_keys))
-    }else{
-      dt <- cbind(dt, lines_dt[, 9:ncol(lines_dt), with=FALSE])
+      fmt_dt <- split_format(fmt_dt, format_keys=format_keys)
     }
+    if(alt_break){
+      nms <- colnames(fmt_dt)
+      if(missing(format_keys)){
+        fmt_dt <- setDT(lapply(nms, function(x){
+          rep(fmt_dt[[x]], alts_count)
+        }))
+      }else{
+        fmt_dt <- setDT(lapply(nms, function(x){
+          xk <- regmatches(x, regexec("FORMAT\\.[^.]+",  x))[[1]]
+          if(xk %in% format_keys_break){
+            res <- strsplit2(fmt_dt[[x]], ",", fixed=TRUE)
+            if(any(sapply(res, length) != alts_count)){
+              res <- unlist(resize_list_string(res, alts_count, fill=""), use.names=F)
+            }else{
+              res <- unlist(res, use.names=F)
+            }
+          }else{
+            res <- rep(fmt_dt[[x]], alts_count)
+          }
+          res
+        }))
+      }
+      setnames(fmt_dt, nms)
+    }
+    dt <- cbind(dt, fmt_dt)
   }
-
   dt
 }
 
