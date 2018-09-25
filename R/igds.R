@@ -194,6 +194,11 @@ indexdb <- function(
   progress=FALSE){
   
   dbname.tmp <- paste0(dbname, ".indexdb.tmp")
+  if(file.exists(dbname.tmp)){
+    stop(paste0("the tmp file of indexdb has found, ",
+                "maybe there is a job that is interrupted or running, please stop the job and remove the tmp file: ",
+                dbname.tmp))
+  }
   
   nlines <- binsize * nbinread
   stopifnot(file.exists(file))
