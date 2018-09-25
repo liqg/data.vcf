@@ -348,8 +348,9 @@ read_vars <- function(
         }))
         setnames(info_dt, nms)
       }
-      
       dt <- cbind(dt, info_dt)
+    }else{
+      dt[, INFO:=""]
     }
   }else{
     if(alt_break){
