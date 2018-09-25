@@ -296,15 +296,19 @@ read_vars <- function(
   if(nrow(lines_dt) == 0) return(dt)
   
   if(!missing(sample_ids)){
-    sample_ids <- unique(sample_ids)
-    id <- sample_ids %in% colnames(lines_dt)[-(1:9)]
-    if(any(!id)){
-      stop(paste0("unrecognized sample_ids: ",
-                  paste(sample_ids[!id], collapse=","),
-                  ".\n must be in the: ",
-                  paste(colnames(lines_dt)[-(1:9)], collapse=", ")))
+    if(!is.null(sample_ids)){
+      sample_ids <- na.omit(unique(sample_ids))
+      id <- sample_ids %in% colnames(lines_dt)[-(1:9)]
+      if(any(!id)){
+        stop(paste0("unrecognized sample_ids: ",
+                    paste(sample_ids[!id], collapse=","),
+                    ".\n must be in the: ",
+                    paste(colnames(lines_dt)[-(1:9)], collapse=", ")))
+      }
+      lines_dt <- lines_dt[, c(colnames(lines_dt)[1:9], sample_ids), with=F]
+    }else{
+      lines_dt <- lines_dt[, 1:8, with=F]
     }
-    lines_dt <- lines_dt[, c(colnames(lines_dt)[1:9], sample_ids), with=F]
   }
   
   dt <- lines_dt[, 1:7]
@@ -348,7 +352,11 @@ read_vars <- function(
       dt <- cbind(dt, info_dt)
     }
   }else{
-    dt <- lines_dt[, 1:8]
+    if(alt_break){
+      dt[, INFO:=rep(lines_dt$INFO, alts_count)]
+    }else{
+      dt <- cbind(dt, lines_dt$INFO)
+    }
   }
   
   if(ncol(lines_dt)>9){
