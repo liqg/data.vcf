@@ -189,7 +189,7 @@ indexdb <- function(
   file, 
   dbname=paste0(file, ".igds"),
   compress_args=list(), 
-  binsize=10000L,
+  binsize=100000L,
   nbinread=1L,
   progress=FALSE){
   
@@ -343,8 +343,15 @@ opendb <- function(file){
     gdsfmt::closefn.gds(gds)
     stop("Can not find chromosomes in the database.")
   }
-  chrnodes <- lapply(allchrnms, function(x) {gdsfmt::index.gdsn(datanode, path=x)})
-  names(chrnodes) <- allchrnms
+  chr_nodes <- lapply(allchrnms, function(x) {gdsfmt::index.gdsn(datanode, path=x)})
+  names(chr_nodes) <- allchrnms
+  
+  chrcol_nodes <- list()
+  for(i in names(chr_nodes)){
+    for(j in gdsfmt::ls.gdsn(chr_nodes[[i]])){
+      chrcol_nodes[[i]][[j]]<-gdsfmt::index.gdsn(chr_nodes[[i]], j)
+    }
+  }
   
   db <- list(
     file=file,
@@ -354,7 +361,8 @@ opendb <- function(file){
     compress_args = compress_args,
     binsize = binsize,
     index = index,
-    chrnodes = chrnodes
+    chr_nodes = chr_nodes,
+    chrcol_nodes = chrcol_nodes
   )
   class(db) <- "igds"
   db
@@ -365,6 +373,18 @@ close.igds <- function(db){
   gdsfmt::closefn.gds(db$gds)
 }
 
+#' Featch data from an igds database
+#' @param db igds object returned by opendb
+#' @param chr chr
+#' @param pos postion
+#' @param pos2 end postion
+#' @param ref ref alleles
+#' @param alt alt alleles
+#' @param select selected cols
+#' @param ncores the number of cores used, it is the mc.cores comming from parallel::mclapply
+#' @param max_bin the max bins to read before merging results, change it little if you want to use less memory.
+#' 
+
 fetchdb <- function(
   db, 
   chr, 
@@ -374,8 +394,8 @@ fetchdb <- function(
   alt, 
   select, 
   ops=NULL,
-  max_bin=NULL,
-  mc.cores=1,
+  ncores=1,
+  max_bin=500L,
   nomatch=NA,
   ol.minoverlap=1L,
   ol.type="any",
@@ -400,6 +420,7 @@ fetchdb <- function(
   stopifnot(!missing(chr))
   chr <- as.character(chr)
   stopifnot(!missing(pos))
+  if(length(chr) == 1) chr <- rep(chr, length(pos))
   stopifnot(length(chr)==length(pos))
   query_variables <- c("chr", "pos")
   if(!missing(pos2)){
@@ -427,8 +448,6 @@ fetchdb <- function(
   if(!missing(pos2) & !missing(ref)){
     stop("ref and pos2 should not be used at the same time")
   }
-  
-  if(is.null(max_bin)) max_bin <- ceiling(100000L/db$binsize)
   
   if(missing(select)){
     select <- setdiff(db$header, query_variables)
@@ -462,7 +481,7 @@ fetchdb <- function(
     }
   }
 
-  isinchrs <- chr %in% names(db$chrnodes)
+  isinchrs <- chr %in% names(db$chr_nodes)
   if(warn) {
     if(any(!isinchrs)) {
       warning(paste("There are chromosomes not in the database:",
@@ -485,16 +504,15 @@ fetchdb <- function(
     get_DTdxdb <- function(DTdx){
       bins <- unique(DTdx[, .(chr, i, isize, start_base, end_base)])
       f <- function(bi){
-        chr_node <- db$chrnodes[[bins$chr[bi]]]
-        start_bi <- cumsum(gdsfmt::read.gdsn(gdsfmt::index.gdsn(chr_node, "start"),
+        start_bi <- cumsum(gdsfmt::read.gdsn(db$chrcol_nodes[[bins$chr[bi]]][["start"]],
                                       start=bins$i[bi],
                                       count=bins$isize[bi])) + bins$start_base[bi]
-        end_bi <- cumsum(gdsfmt::read.gdsn(gdsfmt::index.gdsn(chr_node, "end"),
+        end_bi <- cumsum(gdsfmt::read.gdsn(db$chrcol_nodes[[bins$chr[bi]]][["end"]],
                                     start=bins$i[bi],
                                     count=bins$isize[bi])) + bins$end_base[bi]
         chr_bi <- rep(bins$chr[bi], length(start_bi))
         select_bi <- lapply(select, function(col){
-          gdsfmt::read.gdsn(gdsfmt::index.gdsn(chr_node, col),
+          gdsfmt::read.gdsn(db$chrcol_nodes[[bins$chr[bi]]][[col]],
                             start=bins$i[bi],
                             count=bins$isize[bi])
         })
@@ -523,13 +541,12 @@ fetchdb <- function(
     get_DTdxdb <- function(DTdx){
       bins <- unique(DTdx[, .(chr, i, isize, pos_base)])
       f <- function(bi){
-        chr_node <- db$chrnodes[[bins$chr[bi]]]
-        pos_bi <- cumsum(gdsfmt::read.gdsn(gdsfmt::index.gdsn(chr_node, "pos"),
+        pos_bi <- cumsum(gdsfmt::read.gdsn(db$chrcol_nodes[[bins$chr[bi]]][["pos"]],
                                     start=bins$i[bi],
                                     count=bins$isize[bi])) + bins$pos_base[bi]
         chr_bi <- rep(bins$chr[bi], length(pos_bi))
         select_bi <- lapply(select, function(col){
-          gdsfmt::read.gdsn(gdsfmt::index.gdsn(chr_node, col),
+          gdsfmt::read.gdsn(db$chrcol_nodes[[bins$chr[bi]]][[col]],
                             start=bins$i[bi],
                             count=bins$isize[bi])
         })
@@ -560,19 +577,20 @@ fetchdb <- function(
     get_DTdxdb <- function(DTdx){
       bins <- unique(DTdx[, .(chr, i, isize, pos_base)])
       f <- function(bi){
-        chr_node <- db$chrnodes[[bins$chr[bi]]]
-        pos_bi <- cumsum(gdsfmt::read.gdsn(gdsfmt::index.gdsn(chr_node, "pos"),
+        pos_bi <- cumsum(gdsfmt::read.gdsn(db$chrcol_nodes[[bins$chr[bi]]][["pos"]],
                                     start=bins$i[bi],
                                     count=bins$isize[bi])) + bins$pos_base[bi]
         chr_bi <- rep(bins$chr[bi], length(pos_bi))
         select_bi <- lapply(c(setdiff(query_variables, c("chr","pos")), select), function(col){
-          gdsfmt::read.gdsn(gdsfmt::index.gdsn(chr_node, col),
+          gdsfmt::read.gdsn(db$chrcol_nodes[[bins$chr[bi]]][[col]],
                             start=bins$i[bi],
                             count=bins$isize[bi])
         })
         setDT(c(list(chr_bi),list(pos_bi),select_bi))
       }
+      
       DTdb <- lapply(1:nrow(bins), f) %>% rbindlist
+      
       setnames(DTdb, paste0("db.", c(query_variables, select)))
       setkeyv(DTdb, paste0("db.", query_variables))
 
@@ -587,20 +605,25 @@ fetchdb <- function(
     return(data.table())
   }
 
-  # split
+  # split by mc.cores
   setkey(DTdx, chr, i)
-  DTdx[, splitgrp:=c(1L, rep(0, .N-1)), by=c("chr","i")] %>%
-    .[, splitgrp:=ceiling(cumsum(splitgrp)/max_bin)]
-  DTdx_l <- split(DTdx, by=c("splitgrp"))
-
-  if(mc.cores < 2){
+  tmpdt <- DTdx[, .N,by=c("chr", "i")]
+  suppressWarnings(tmpdt[, splitcore:=1L:ncores])
+  tmpdt[, splitcore:=sort(splitcore)]
+  DTdx[tmpdt, splitcore:=i.splitcore, on=c("chr", "i")]
+  # split by max_bin
+  DTdx[, splitbin:=c(1L, rep(0, .N-1)), by=c("chr","i","splitcore")] %>%
+    .[, splitbin:=ceiling(cumsum(splitbin)/max_bin)]
+  DTdx_l <- split(DTdx, by=c("splitbin"))
+  
+  if(ncores < 2 || length(DTdx_l) == 1){
     DTdxdb <- lapply(DTdx_l, get_DTdxdb)
   }else{
-    DTdxdb <- parallel::mclapply(DTdx_l, get_DTdxdb, mc.cores=mc.cores)
+    DTdxdb <- parallel::mclapply(DTdx_l, get_DTdxdb, mc.cores=ncores)
   }
   DTdxdb <- rbindlist(DTdxdb)
   if(nrow(DTdxdb) == 0 ) {
-    return(data.table())
+    return(DTdxdb)
   }
   setkeyv(DTdxdb, query_variables)
   
@@ -615,10 +638,12 @@ fetchdb <- function(
     DT0 <- setDT(lapply(query_variables, function(x) get(x)))
     setnames(DT0, query_variables)
     for(col in paste0("db.", select)){
-      DT0[DTdxdb, (get("col")):=get(..("col")), on=query_variables]
+      DT0[DTdxdb, (..("col")):=get(..("col")), on=query_variables]
     }
     DTdxdb <- DT0
   }
+  
+  setnames(DTdxdb, paste0("db.", select), select)
 
   DTdxdb
 }
