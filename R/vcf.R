@@ -284,9 +284,7 @@ read_vars <- function(
   
   if(is.character(vcf)){
     vcf <- open_vcf(vcf)
-    
   }
-  
   stopifnot(inherits(vcf, "vcf"))
   dt <- data.table()
   lines_dt <- read_body(vcf, n=n)
@@ -356,7 +354,7 @@ read_vars <- function(
     if(alt_break){
       dt[, INFO:=rep(lines_dt$INFO, alts_count)]
     }else{
-      dt <- cbind(dt, lines_dt$INFO)
+      dt <- cbind(dt, INFO=lines_dt$INFO)
     }
   }
   
