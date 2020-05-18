@@ -59,3 +59,7 @@ uniq_char <- function(x, y = "") {
     .Call('_data_vcf_uniq_char', PACKAGE = 'data.vcf', x, y)
 }
 
+vcf_clean_rcpp <- function(vcf, ovcf, info_keys, format_keys) {
+    invisible(.Call('_data_vcf_vcf_clean_rcpp', PACKAGE = 'data.vcf', vcf, ovcf, info_keys, format_keys))
+}
+

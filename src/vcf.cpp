@@ -1,7 +1,7 @@
 #include <Rcpp.h>
 #include <zlib.h>
 #include <Rinternals.h> // R_ExpandFileName
-#include "split.h"
+#include "llib.h"
 #include "data.vcf_types.h"
 
 using namespace Rcpp;
@@ -84,7 +84,7 @@ std::vector<std::string> read_lines(
     while(*p1 != '\0' && (n == 0 || lines.size() < n)){
       if(*p1 == '\n'){
         *p1 = '\0';
-        lines.push_back(std::string(p2));
+        lines.emplace_back(p2);
         p2 = p1;
         p2++;
       }
@@ -106,14 +106,29 @@ std::vector<std::string> read_lines(
 // [[Rcpp::export]]
 std::vector<std::vector<std::string> > resize_list_string (
     std::vector<std::vector<std::string> > &x,
+    std::vector<int> &n,
+    std::string fill = ""){
+  if(x.size() != n.size()){
+    Rcpp::stop("the length of n must be equal with the length of x");
+  }
+  
+  for(int i=0; i < n.size(); i++){
+    if(x[i].size() != n[i]) x[i].resize(n[i], fill);
+  }
+  
+  return x;
+}
+
+std::vector<std::vector<std::string> > resize_list_string_deprecated (
+    std::vector<std::vector<std::string> > &x,
     std::vector<int> n,
     std::string fill=""){
   if(x.size() != n.size()){
     Rcpp::stop("the length of n must be equal with the length of x");
   }
-
+  
   std::vector<std::vector<std::string> > out(x.size());
-
+  
   for(int i=0; i < n.size(); i++){
     std::vector<std::string> out_i(n[i], fill);
     for(int j=0; j < n[i] && j < x[i].size(); j++){
@@ -121,7 +136,7 @@ std::vector<std::vector<std::string> > resize_list_string (
     }
     out[i] = out_i;
   }
-
+  
   return out;
 }
 
@@ -153,50 +168,15 @@ Rcpp::List str_to_ikv (std::vector<std::string> &x, const char sep){
         }
       }
 
-      iv.push_back(i+1);
-      kv.push_back(k);
-      vv.push_back(v);
+      iv.emplace_back(i+1);
+      kv.emplace_back(std::move(k));
+      vv.emplace_back(std::move(v));
     }
   }
   return Rcpp::List::create(Rcpp::Named("i") = iv,
                             Rcpp::Named("k") = kv,
                             Rcpp::Named("v") = vv);
 }
-
-// //' 7x slower than strsplit so not used
-// // [[Rcpp::export]]
-// std::vector<std::vector<std::string> > split_sample (
-//     std::vector<std::string> &x,
-//     std::string sep,
-//     std::vector<unsigned int> &n,
-//     std::string fill=""){
-//   if(x.size() != n.size()){
-//     Rcpp::stop("the length of n must be equal with the length of x");
-//   }
-//   std::vector<std::vector<std::string> > out(x.size());
-// 
-//   for(int i=0; i < n.size(); i++){
-//     std::vector<std::string> xis = split(x[i], sep);
-//     std::vector<std::string> out_i(n[i], fill);
-//     for(int j=0; j < n[i] && j < xis.size(); j++){
-//       out_i[j] = xis[j];
-//     }
-//     out[i] = out_i;
-//   }
-//   return out;
-// }
-
-// std::vector<std::vector<std::string> > table_str(
-//   const std::vector<std::string> &x,
-//   const std::string seq,
-//   const std::string fill = ""
-// ){
-//   std::vector<std::vector<std::string> > out(x.size());
-//   if(x.size() == 0) return out;
-//   int nc = split(x[0], seq).size();
-//   int nr = x.size();
-//   
-// }
 
 //' looply collapse each vector of a list by a group of indexs
 //' @param x list
@@ -249,4 +229,3 @@ std::vector<std::string> uniq_char(std::vector<std::string> x, std::string y="")
   }
   return res;
 }
-

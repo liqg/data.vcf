@@ -9,17 +9,22 @@ open_vcf <- function(file){
   con <- open_file(filepath)
   # meta line
   meta <- c()
-  while(length(l <- read_lines(con, 1)) > 0 & substr(l, 1, 2) == "##"){
+  while(length(l <- read_lines(con, 1000)) > 0 & all(substr(l, 1, 2) == "##")){
     meta <- c(meta, l)
   }
+  
   # header line
-  if(substr(l, 1, 4) == "#CHR"){
-    header <- strsplit2(l, "\t", fixed=T)[[1]]
+  headid = which(substr(l, 1, 4) == "#CHR")[1]
+  if (!is.na(headid)) {
+    header <- strsplit2(l[headid], "\t", fixed=T)[[1]]
     header <- sub("^#","", header)
   }else{
     stop("can not find header")
   }
-
+  if(headid > 1) {
+    meta <- c(meta, l[1:(headid-1)])
+  }
+  
   stopifnot(length(header) >= 8)
   standard_8cols <- c("CHROM","POS","ID","REF","ALT","QUAL","FILTER","INFO")
   if(any(header[1:8] != standard_8cols)){
@@ -35,6 +40,8 @@ open_vcf <- function(file){
   vcf$meta <- meta
   vcf$header <- header
   vcf$nvar <- 0L
+  vcf$left <- vector(mode="character")
+  if (headid < length(l)) vcf$left <- l[(headid+1):length(l)]
 
   class(vcf) <- c("vcf", class(vcf))
 
@@ -50,8 +57,25 @@ close.vcf <- function(vcf){
 #' @param n n variants/lines to read
 #' @return data.table the vcf table format.
 read_body <- function(vcf, n=0){
-  lines <- read_lines(vcf$con, n)
-
+  if(length(vcf$left) > 0) {
+    if (n == 0) {
+      lines <- c(vcf$left, read_lines(vcf$con, 0))
+    } else {
+      if (length(vcf$left) > n) {
+        lines <- vcf$left[1:n]
+        vcf$left <- vcf$left[(n+1):length(vcf$left)]
+      } else if (length(vcf$left) == n) {
+        lines <- vcf$left
+        vcf$left <- vector(mode="character")
+      } else {
+        lines <- c(vcf$left, read_lines(vcf$con, n-length(vcf$left)))
+        vcf$left <- vector(mode="character")
+      }
+    }
+  } else {
+    lines <- read_lines(vcf$con, n)
+  }
+  
   if(length(lines) == 0){
     return(data.table())
   }
@@ -147,7 +171,7 @@ split_format <- function(x, format_keys=NULL, prefix="FORMAT."){
   format_ikv <- cbind(
     format_ikv,
     setDT(lapply(x[,-1], function(y){
-      xs <- strsplit2(y,":",fixed=T)
+      xs <- strsplit2(y, ":", fixed=T)
       xs <- resize_list_string(xs, FORMAT_length, fill="")
       unlist(xs)
     })))
@@ -194,7 +218,7 @@ reformat_body <- function(lines, varid_offset=0){
   variants$INFO <- variants$INFO[!(varid %in% lines[, .I[INFO %in% c(".", "", NA)]])] # remove missing info
 
   # split sample format
-  if(ncol(lines) >= 9){
+  if(ncol(lines) >= 9) {
     splited_format <- strsplit2(lines$FORMAT, ":", fixed=TRUE)
     FORMAT_length <- sapply(splited_format, length)
     if(any(FORMAT_length == 0)){

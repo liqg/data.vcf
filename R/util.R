@@ -13,7 +13,7 @@ set_colclass <- function(x, funcs){
      if(!is.function(f) && is.character(f)){
        f <- get(f)
      }
-     x[, (get("i")):=..("f")(get(..("i")))]
+     x[, (..("i")):=..("f")(get(..("i")))]
    } 
   }
 }
