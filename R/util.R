@@ -90,3 +90,29 @@ tstrsplit2 <- function (x, ..., fill = NA, type.convert = FALSE, keep, names = F
   ans
 }
 
+#' paste cols of a data.table using key-value style
+#' @param sep1 separate between key and value
+#' @param sep2 separate between cols
+#'
+kvpaste <- function(df, sep1, sep2, cols){
+  stopifnot(!missing(sep1))
+  stopifnot(!missing(sep2))
+  stopifnot(!missing(df))
+  if (inherits(df, "matrix")) df <- as.data.table(df)
+  #stopifnot(inherits(df, "data.frame"))
+  if(missing(cols)) cols <- colnames(df)
+  #df <- df[, lapply(.SD, as.character), .SDcols=cols]
+  kvpaste_rcpp(df, sep1, sep2, nakey=FALSE)
+}
+
+#' split key-value strings into dataframe
+#' @param x input strings
+#' @param sep1 separate between key and value
+#' @param sep2 separate between cols
+kvsplit <- function(x, sep1, sep2){
+  out <- kvsplit_rcpp(x, sep1, sep2)
+  setDT(out)
+  out
+}
+
+
