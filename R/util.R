@@ -115,4 +115,47 @@ kvsplit <- function(x, sep1, sep2){
   out
 }
 
+split_long <- function(x, col, split, nm=col, keep.rowid=F, ...){
+  stopifnot(is.data.table(x))
+  stopifnot(all(col %in% colnames(x)))
+  stopifnot(length(col) == length(nm))
+  if(length(split)==1) split <- rep(split, length(col))
+  stopifnot(length(col) == length(split))
+  
+  if(".rowid" %in% colnames(x)){
+    stop("remove .rowid col first")
+  }
+  old.colorder <- colnames(x)
+  
+  x[[".rowid"]] <- 1L:nrow(x)
+  setkey(x, .rowid)
+  
+  dt <- data.table()
+  for(coli in col){
+    s <- strsplit2(x[[coli]], split, ...)
+    dti <- data.table(rep(1:length(s), sapply(s, length)), unlist(s, use.names=F))
+    setnames(dti, c(".rowid", coli))
+    if(nrow(dt)){
+      dt <- unique(merge(dt, dti, all=T, allow.cartesian=T, by=".rowid"))
+    }else{
+      dt <- dti
+    }
+  }
+  setnames(dt, c(".rowid", nm))
+  if(setequal(c(".rowid", col), colnames(x))){
+    x <- dt
+  }else{
+    x <- x[, setdiff(colnames(x), col), with = F]
+    x <- x[dt, on=".rowid"]
+  }
+  
+  if(!keep.rowid) {
+    x <- x[, -".rowid", with=F]
+    setcolorder(x, old.colorder)
+  }else{
+    setcolorder(x, c(".rowid", old.colorder))
+  }
+  x
+}
+
 
