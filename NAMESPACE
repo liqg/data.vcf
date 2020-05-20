@@ -12,14 +12,6 @@ S3method(close, vcf)
 export(read_vars, tovcf)
 export(split_info, split_format)
 
-
-export(opendb)
-export(indexdb)
-export(fetchdb)
-S3method(close, igds)
-S3method(print, igds)
-S3method(head, igds)
-
 export(`..`)
 export(strsplit2)
 export(tstrsplit2)
