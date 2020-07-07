@@ -52,7 +52,7 @@ open_vcf <- function(file){
 }
 
 split_info <- function(vars, info_keys = vector("character")) {
-  info_dt <- kvsplit(vars$info, "=", ";")
+  info_dt <- kvsplit(vars$INFO, "=", ";")
   if (length(info_dt)>0)
     setnames(info_dt, paste0("INFO.", colnames(info_dt)))
   
