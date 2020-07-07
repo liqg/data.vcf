@@ -60,26 +60,32 @@ int count_beyond_threshold(Rcpp::NumericVector x, int y) {
 }
 
 //[[Rcpp::export]]
-Rcpp::DataFrame kvsplit_rcpp(Rcpp::CharacterVector input, char sep1, char sep2){
-  auto out = Rcpp::DataFrame::create();
+Rcpp::DataFrame kvsplit_rcpp(std::vector<std::string> input, char sep1, char sep2, bool na){
+  std::vector<Rcpp::CharacterVector> out;
+  Rcpp::CharacterVector cnms;
+  std::map<std::string, int> idmap;
   int nr = input.size();
   for(int i=0; i<nr; i++){
     std::map<std::string, std::string> attr;
-    std::string s = Rcpp::as<std::string>(input[i]);
-    kvsplit(attr, s, sep1, sep2);
-    for(auto kv: attr){
-      if(!out.containsElementNamed(kv.first.c_str())){
-        out[kv.first] = Rcpp::CharacterVector(nr);
+    kvsplit(attr, input[i], sep1, sep2);
+    for (const auto &kv: attr) {
+      auto id = idmap.find(kv.first);
+      if (idmap.find(kv.first) == idmap.end()) {
+        idmap.insert(std::make_pair(kv.first, idmap.size()));
+        Rcpp::CharacterVector vec(nr);
+        if(na) vec.fill(NA_STRING);
+        vec[i] = kv.second;
+        out.emplace_back(vec);
+        cnms.push_back(kv.first);
+      } else {
+        out[id->second][i] = kv.second;
       }
-      dfset<Rcpp::CharacterVector, std::string>(out, kv.first, i, kv.second);
     }
   }
-  return out;
+  Rcpp::DataFrame ret = Rcpp::DataFrame::create(out, Rcpp::Named("stringsAsFactors") = false);
+  ret.names() = cnms;
+  return ret;
 }
-
-#include <Rcpp.h>
-using namespace Rcpp;
-
 
 // [[Rcpp::export]]
 Rcpp::NumericMatrix col_sums(
@@ -89,7 +95,7 @@ Rcpp::NumericMatrix col_sums(
   int ncols = m.ncol();
   int nlist = rows_list.size();
   Rcpp::NumericMatrix res(nlist, ncols);
-
+  
   for (int i = 0; i < nlist; i++){
     Rcpp::NumericVector rows = Rcpp::as<Rcpp::NumericVector>(rows_list[i]) - 1; //0-based
     int nr = rows.size();

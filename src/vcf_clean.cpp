@@ -3,7 +3,11 @@
 #include <Rcpp.h>
 
 // return non-zero if failed
-int vcf_clean(std::string vcf, std::string ovcf, std::vector<std::string> info_keys, std::vector<std::string> format_keys)
+int vcf_clean(
+    std::string vcf, 
+    std::string ovcf, 
+    std::vector<std::string> info_keys, 
+    std::vector<std::string> format_keys)
 {
   int ninfo = info_keys.size();
   std::set<std::string> info_set;
@@ -101,6 +105,6 @@ void vcf_clean_rcpp(SEXP vcf, SEXP ovcf, SEXP info_keys, SEXP format_keys)
                       Rcpp::as<std::vector<std::string>>(info_keys),
                       Rcpp::as<std::vector<std::string>>(format_keys));
   if(ret != 0) {
-    Rcpp::stop("");
+    Rcpp::stop("error");
   }
 }

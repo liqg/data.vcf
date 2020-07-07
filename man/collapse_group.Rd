@@ -2,7 +2,7 @@
 % Please edit documentation in R/RcppExports.R
 \name{collapse_group}
 \alias{collapse_group}
-\title{looply collapse each vector of a list by a group of indexs}
+\title{collapse each vector of a list by a group of indexs}
 \usage{
 collapse_group(x, g, sep = "", fill = "")
 }
@@ -19,6 +19,6 @@ collapse_group(x, g, sep = "", fill = "")
 list
 }
 \description{
-looply collapse each vector of a list by a group of indexs
+collapse each vector of a list by a group of indexs
 }
 

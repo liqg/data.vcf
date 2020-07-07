@@ -121,7 +121,12 @@ static std::string kvpaste(std::map<std::string, std::string> &x, char sep1, cha
 
 static void join(std::string &out, std::vector<std::string> &x, char sep)
 {
-  for(auto k: x){
+  int l = out.size() + x.size();
+  for(const auto &k: x){
+    l += k.size();
+  }
+  out.reserve(l);
+  for(const auto &k: x){
     if(out.size() != 0) out += sep;
     out += k;
   }
@@ -181,8 +186,6 @@ static void kvsplit(std::map<std::string, std::string> &attr, std::string &x, ch
     if (kend == -1 ) continue;
     else k = kv.substr(kstart, kend-kstart+1);
     if (vend != -1) v = kv.substr(vstart, vend - vstart + 1);
-    k.shrink_to_fit();
-    v.shrink_to_fit();
     attr.insert(std::make_pair(k, v));
   }
 }

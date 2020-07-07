@@ -1,16 +1,12 @@
 importFrom(magrittr,"%>%")
-importFrom(Rcpp,evalCpp)
+importFrom(Rcpp, evalCpp)
 useDynLib(data.vcf)
 
-export(open_file, close_file)
+export(open_file)
 export(read_lines)
 
-export(read_body, reformat_body)
-
 export(open_vcf)
-S3method(close, vcf)
-export(read_vars, tovcf)
-export(split_info, split_format)
+export(read_vars)
 
 export(`..`)
 export(strsplit2)

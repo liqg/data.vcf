@@ -57,7 +57,6 @@ strsplit2 <- function (str, split, fixed, perl, regex, coll, charclass, ...)
   fun(str, split, ...)
 }
 
-
 tstrsplit2 <- function (x, ..., fill = NA, type.convert = FALSE, keep, names = FALSE)
 {
   ans = data.table::transpose(strsplit2(as.character(x), ...), fill = fill,
@@ -109,8 +108,9 @@ kvpaste <- function(df, sep1, sep2, cols){
 #' @param x input strings
 #' @param sep1 separate between key and value
 #' @param sep2 separate between cols
-kvsplit <- function(x, sep1, sep2){
-  out <- kvsplit_rcpp(x, sep1, sep2)
+#' @param na bool, FALSE for "", TRUE for NA_character_
+kvsplit <- function(x, sep1, sep2, na=FALSE){
+  out <- kvsplit_rcpp(x, sep1, sep2, na)
   setDT(out)
   out
 }
@@ -158,4 +158,16 @@ split_long <- function(x, col, split, nm=col, keep.rowid=F, ...){
   x
 }
 
+na.replace <- function(x, y) {
+  replace(x, is.na(x), y)
+}
+
+new.data.table <- function(fill, nrow, col.names) {
+  dt <- data.table()
+  if(length(col.names) > 0) {
+    dt <- data.table(matrix(fill, nrow=nrow, ncol=length(col.names)))
+    setnames(dt, col.names)
+  }
+  dt
+}
 
