@@ -140,6 +140,7 @@ read_vars <- function(
     break_alt, break_info_keys, break_format_keys, info_keys_exclude, format_keys_exclude)
   setDT(vars)
   setnames(vars, cnms)
+  vars[, POS:=as.integer(POS)]
   
   info_dt <- NULL
   if (split_info) {
