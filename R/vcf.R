@@ -64,6 +64,7 @@ split_info <- function(vars, info_keys = vector("character")) {
   info_dt
 }
 
+
 split_format <- function(vars, format_keys = vector("character"), sample_ids=vector("character")) {
   format_dt <- NULL
   if (length(vars) > 9) {
@@ -74,8 +75,19 @@ split_format <- function(vars, format_keys = vector("character"), sample_ids=vec
     format_dt <- setDT(split_format_rcpp(vars$FORMAT, vars[, -(1:9), with=F]))
     if(length(format_keys) > 0) {
       tmp <- expand.grid(format_keys, colnames(vars)[10:length(vars)])
-      missing_cols <- setdiff(paste("FORMAT", tmp[,1], tmp[,2], sep="."), colnames(format_dt))
-      format_dt <- cbind(format_dt, new.data.table("", nrow(format_dt), missing_cols))
+      format_cols <- paste("FORMAT", tmp[,1], tmp[,2], sep=".")
+      missing_cols <- setdiff(format_cols, colnames(format_dt))
+      DT_missing <- NULL
+      if(length(missing_cols) > 0) {
+        DT_missing <- new.data.table("", nrow(format_dt), missing_cols)
+      }
+      having_cols <- intersect(format_cols, colnames(format_dt))
+      DT_having <- NULL
+      if(length(having_cols)>0) {
+        DT_having <- format_dt[, having_cols, with=F]
+      }
+      
+      format_dt = cbind(DT_having, DT_missing)[, format_cols, with=F]
     }
   }
   format_dt
